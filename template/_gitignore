@@ -5,7 +5,7 @@ build/
 .venv/
 __pycache__/
 
-# Local collaborative worktrees / clones
+# Local collaborative worktrees / clones（推荐用 TeamWork/）
 TeamWork/
 SprintWork/
 DevWorktrees/
@@ -18,3 +18,13 @@ DevWorktrees/
 # OS / editor
 .DS_Store
 Thumbs.db
+
+# -----------------------------------------------------------
+# 代码仓库独立成 Git 仓库后的处理（可选）
+# -----------------------------------------------------------
+# 默认 `--git-root=workspace` 模式下，外层工作区与代码仓库共用同一个 Git 仓库；
+# 当 FS 后期为生产上线把 10_代码仓库/{{REPO_NAME}}/ 单独 `git init` 并 push 到
+# 独立的 GitHub/GitLab 仓库时，请取消下面一行注释，避免 embedded git repository 警告
+# 与双重历史。
+#
+# 10_代码仓库/{{REPO_NAME}}/
