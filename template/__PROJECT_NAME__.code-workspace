@@ -1,0 +1,25 @@
+{
+  "folders": [
+    { "path": ".", "name": "Workspace" },
+    { "path": "00_项目导航", "name": "00 Project Nav" },
+    { "path": "01_产品发现", "name": "01 Discovery" },
+    { "path": "02_产品待办", "name": "02 Backlog" },
+    { "path": "03_迭代运行", "name": "03 Sprints" },
+    { "path": "04_工程设计", "name": "04 Engineering" },
+    { "path": "05_质量验证", "name": "05 Quality" },
+    { "path": "06_发布运维", "name": "06 Delivery" },
+    { "path": "07_度量改进", "name": "07 Metrics" },
+    { "path": "10_代码仓库/{{REPO_NAME}}", "name": "Code Repo" }
+  ],
+  "settings": {
+    "editor.tabSize": 2,
+    "editor.formatOnSave": true,
+    "files.exclude": {
+      "**/.git": true,
+      "**/node_modules": true,
+      "**/.venv": true,
+      "**/__pycache__": true,
+      "**/dist": true
+    }
+  }
+}

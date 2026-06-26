@@ -1,0 +1,11 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "workspace: open project home",
+      "type": "shell",
+      "command": "echo 00_项目导航/00_项目首页.md",
+      "problemMatcher": []
+    }
+  ]
+}

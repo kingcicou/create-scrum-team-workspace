@@ -1,0 +1,17 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "repo: check",
+      "type": "shell",
+      "command": "echo Add project check command here",
+      "problemMatcher": []
+    },
+    {
+      "label": "repo: test",
+      "type": "shell",
+      "command": "echo Add project test command here",
+      "problemMatcher": []
+    }
+  ]
+}

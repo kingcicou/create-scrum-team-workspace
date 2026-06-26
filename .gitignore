@@ -1,0 +1,28 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# 本地验证产物（dry-run 测试或一次性生成的工作区）
+verify-*/
+tmp-*/
+playground/
+scrum.config.json
+
+# 环境
+.env
+.env.*
+
+# 日志
+*.log

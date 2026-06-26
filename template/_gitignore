@@ -1,0 +1,20 @@
+# Dependencies and build outputs
+node_modules/
+dist/
+build/
+.venv/
+__pycache__/
+
+# Local collaborative worktrees / clones
+TeamWork/
+SprintWork/
+DevWorktrees/
+
+# Local env
+.env
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+Thumbs.db

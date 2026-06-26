@@ -1,0 +1,8 @@
+# 保证所有文本文件用 LF，避免跨平台脚本行尾问题（特别是 index.mjs / create.sh 的 shebang）
+* text=auto eol=lf
+
+# 二进制文件按默认处理（无需 eol）
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
