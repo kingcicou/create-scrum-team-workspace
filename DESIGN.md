@@ -61,13 +61,18 @@ node index.mjs <project-name> \
   --config=./scrum.config.json \
   --interactive \
   --dry-run \
-  --git-root=workspace|repo|none \
+  --git-root=repo|workspace|none \
+  --worktrees \
+  --role-test-commits \
+  --remote=<url> \
+  --push \
+  --sprint=1 \
   --no-git
 ```
 
 ### 交互流程
 
-`--interactive`（或缺省项目名时自动触发）会逐项询问：项目名、项目类型、代码仓库名、Git 初始化模式、角色套装、是否定制角色与邮箱，最后展示**摘要确认**页，用户输入 Y 才会写盘。
+`--interactive`（或缺省项目名时自动触发）会逐项询问项目、仓库和角色信息。角色套装选定后先展示全量角色表，用户可按槽位或全部调整名称与邮箱；随后确认 worktree、角色测试提交、远端和推送策略，最后在**摘要确认**页输入 Y 才会写盘。
 
 ### 占位符约定
 
@@ -80,8 +85,10 @@ node index.mjs <project-name> \
 - 不直接生成具体技术栈代码，避免把模板绑定到某个框架。
 - 项目工作区文档是主事实源，代码仓库不再生成重复的 `01-docs` 文档中心；代码仓库只保留 `apps/`、`infra/`、README、可执行资产和链接。
 - 生成文档多于生成业务代码，因为 Scrum 团队协同的最大风险通常是输入输出、角色边界、证据链和集成节奏不清。
-- 默认使用英文 hyphen 分支名，目录名允许显示名称但会清理明显危险字符。
-- Git 初始化提供 `workspace` 与 `repo` 两种模式，分别对应"文档和代码一起管理"与"代码仓库独立管理"两种团队习惯。
+- 默认使用 `feature/sprint-<n>/<topic>-<name>-<role>` 分支名，目录名允许显示名称但会清理明显危险字符。
+- 默认使用 `repo` 模式，让 5 个角色 worktree 只检出代码仓内容；`workspace` 作为早期单仓选项保留。
+- 远端配置和推送是两个动作，避免提供 URL 后意外写入远端。
+- 角色就绪提交是可选验证证据，只存在于各自分支，不自动合入主线。
 
 ## 演进决策
 
@@ -89,6 +96,11 @@ node index.mjs <project-name> \
 
 | 版本 | 决策 | 起因 | 选项与取舍 | 结论 |
 | --- | --- | --- | --- | --- |
+| 0.3.0 | 默认独立代码仓并创建 5 个角色 worktree | 编码角色和职责已知，手工复制/配置既慢又易串号 | A. 只输出命令；B. 自动创建 clone；C. 自动创建 worktree | 选 C，共享对象库且目录隔离；PO/SM 不创建编码目录 |
+| 0.3.0 | Git 身份使用 worktree config | 普通 local config 被所有 worktree 共享，角色身份会互相覆盖 | A. 每人独立 clone；B. 环境变量提交；C. `extensions.worktreeConfig` | 选 C，保留 worktree 优势并真正隔离身份 |
+| 0.3.0 | 个人分支改为 `feature/sprint-n/...` | Git 不能同时保存 `sprint-n` 与 `sprint-n/...` 引用 | A. 改集成分支；B. 改个人分支命名空间 | 选 B，保留团队熟悉的 `sprint-n` 集成分支 |
+| 0.3.0 | 远端配置与 push 分离 | URL 可能填错，远端也可能已有历史 | A. 有 URL 就 push；B. 显式 `--push` | 选 B，且永不自动 force |
+| 0.3.0 | 角色测试提交为可选且不合入 | 需要验证提交身份，但无业务价值的提交不应污染主线 | A. 全部合入；B. 只留个人分支；C. 不提供 | 选 B |
 | 0.2.0 | 路径占位符统一为 `__KEY__` | 原 `PROJECT_NAME` 裸串替换缺乏自描述性，未来新增需要进路径的占位符容易踩坑 | A. 保持现状；B. 改 `{{KEY}}` 但与 NTFS/部分工具不友好；C. 改 `__KEY__` | 选 C，内容用 `{{KEY}}`、路径用 `__KEY__`，形成对称的两套规则 |
 | 0.2.0 | 模板拷贝两阶段化（plan → apply） | 原一次性写盘无法 dry-run，失败时残留半个工作区 | A. 单阶段加 try/finally 回滚；B. 拷到临时目录再 rename；C. 计划/执行分离 | 选 C，同时获得 dry-run 能力且实现最简 |
 | 0.2.0 | 新增 `--config` JSON 配置 | 交互模式适合首次，重建/对比实验需要可重放 | A. 共享 shell 别名脚本；B. 命令行长串组合；C. JSON 配置文件 | 选 C，与 CI 友好；CLI 仍可覆盖配置文件 |

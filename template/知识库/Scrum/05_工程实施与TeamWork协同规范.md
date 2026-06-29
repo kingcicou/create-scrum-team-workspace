@@ -30,15 +30,15 @@
 推荐：
 
 ```text
-sprint-<number>/<short-topic>-<name>-<role>
+feature/sprint-<number>/<short-topic>-<name>-<role>
 ```
 
 示例：
 
 ```text
-sprint-1/login-flow-evan-mid-fe-qa
-sprint-1/api-contract-ritchie-mid-be-qa
-sprint-1/ci-baseline-torvalds-fs-devops
+feature/sprint-1/login-flow-evan-mid-fe-qa
+feature/sprint-1/api-contract-ritchie-mid-be-qa
+feature/sprint-1/ci-baseline-torvalds-fs-devops
 ```
 
 连接符建议：
@@ -55,16 +55,21 @@ sprint-1/ci-baseline-torvalds-fs-devops
 ```bash
 git switch -c sprint-1
 mkdir -p TeamWork
-git worktree add TeamWork/Evan_MidFE_QA -b sprint-1/login-flow-evan-mid-fe-qa sprint-1
-git worktree add TeamWork/Ritchie_MidBE_QA -b sprint-1/api-contract-ritchie-mid-be-qa sprint-1
+git worktree add TeamWork/Evan_MidFE_QA -b feature/sprint-1/login-flow-evan-mid-fe-qa sprint-1
+git worktree add TeamWork/Ritchie_MidBE_QA -b feature/sprint-1/api-contract-ritchie-mid-be-qa sprint-1
 ```
 
 配置 Git 身份：
 
 ```bash
-git -C TeamWork/Evan_MidFE_QA config user.name "Evan"
-git -C TeamWork/Evan_MidFE_QA config user.email "evan@example.com"
+git config extensions.worktreeConfig true
+git -C TeamWork/Evan_MidFE_QA config --worktree user.name "Evan"
+git -C TeamWork/Evan_MidFE_QA config --worktree user.email "evan@example.com"
 ```
+
+普通的 `git config user.name/user.email` 会写入共享仓库配置，不能隔离多个
+worktree。角色工作区必须使用 `--worktree`，详见
+`11_角色工作区与Git身份引导规范.md`。
 
 ## 5. FS 集成职责
 

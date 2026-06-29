@@ -26,8 +26,8 @@
 
 | 模式 | 外层 .git | 内层 .git | 用一句话描述 |
 | --- | :-: | :-: | --- |
-| **A. workspace**（默认） | ✅ | ❌ | 文档+代码同仓，最简单 |
-| **B. repo** | ❌ | ✅ | 只代码进 git，文档无版本控制（或单独管） |
+| **A. workspace** | ✅ | ❌ | 文档+代码同仓，最简单 |
+| **B. repo**（生成器默认） | ❌ | ✅ | 先独立代码仓，文档可随后独立管理 |
 | **C. 两仓独立** | ✅ | ✅ | 文档仓 + 代码仓物理嵌套、逻辑解耦 |
 
 ### 模式 A — workspace
@@ -69,9 +69,9 @@
 ```text
 代码仓 .git/             ← 一份对象库
 ├── 主工作目录            ← checkout main
-├── TeamWork/Evan_xx     ← checkout sprint-1/login-evan
-├── TeamWork/Ritchie_xx  ← checkout sprint-1/api-ritchie
-└── TeamWork/Fowler_xx   ← checkout sprint-1/arch-fowler
+├── TeamWork/Evan_xx     ← checkout feature/sprint-1/login-evan
+├── TeamWork/Ritchie_xx  ← checkout feature/sprint-1/api-ritchie
+└── TeamWork/Fowler_xx   ← checkout feature/sprint-1/arch-fowler
 ```
 
 | 维度 | 说明 |
@@ -106,7 +106,7 @@
 
 | 风险 | 防御机制 |
 | --- | --- |
-| 使用统一账号代提 | 禁止；每 worktree 单独 `git config user.name/user.email` |
+| 使用统一账号代提 | 禁止；启用 `extensions.worktreeConfig` 后，每个 worktree 使用 `git config --worktree` |
 | 自动化机器人提交 | 必须用 bot 专属账号（如 `ci-bot`），名字明确 |
 | 多人共用一台机器 | 每人独立 worktree + 独立身份配置 |
 | 邮箱写错 | 后续 commit 改对即可；不强制改写已 push 的历史 |
@@ -121,7 +121,7 @@
 | --- | --- | --- |
 | `main` | FS 守护 | 长期，只接收已验证增量 |
 | `sprint-<n>` | FS 建并维护 | 一个 Sprint |
-| `sprint-<n>/<topic>-<name>-<role>` | 个人 | 1-3 天 |
+| `feature/sprint-<n>/<topic>-<name>-<role>` | 个人 | 1-3 天 |
 | `hotfix/<issue>` | TL/FS | 紧急修复 |
 
 合并策略：
@@ -132,9 +132,9 @@
 
 ## 7. 本次迭代的 FAQ（释疑归档）
 
-### Q1：为什么生成器默认用模式 A 而不是 C？
+### Q1：为什么生成器默认用模式 B，而不是直接创建两仓？
 
-A：90% 的项目在 Sprint 0~3 阶段不需要两仓独立。提供模式 A 默认是为了**降低启动摩擦**。需要升级时由 FS 主导（步骤标准化）。
+A：角色 worktree 应只检出代码仓内容，不能把整个文档工作区复制 5 次；因此代码仓独立初始化最符合编码协作。生成器无法替团队决定文档远端、权限和保密边界，所以不擅自初始化第二个远端。需要文档版本控制时，由 SM/FS 把外层初始化为独立文档仓，即升级为模式 C。
 
 ### Q2：模式 A 下 `10_代码仓库/<repo>/.gitignore` 为什么还要存在？
 
@@ -169,10 +169,15 @@ A：**会**，但可用以下手段缓解：
 
 如果团队规模/PR 频率让模式 A 不再合适，就是 §4 触发的 A→C 升级时机。
 
+### Q9：为什么个人分支不能叫 `sprint-1/...`？
+
+A：Git 引用以路径存储，`sprint-1` 分支与 `sprint-1/...` 分支存在文件/目录冲突，无法同时创建。集成分支保留 `sprint-1`，个人分支使用 `feature/sprint-1/...`。
+
 ## 8. 参考与延伸阅读
 
 - 操作 SOP：`00_项目导航/08_团队开发协作SOP.md`
 - 工程实施规范：`知识库/Scrum/05_工程实施与TeamWork协同规范.md`
+- 角色工作区与身份：`知识库/Scrum/11_角色工作区与Git身份引导规范.md`
 - 质量门禁：`知识库/Scrum/08_质量门禁与测试金字塔指南.md`
 - 模板演进规则：`知识库/项目模板/02_模板演进与反向回流指南.md`
 - Git 官方 worktree 文档：https://git-scm.com/docs/git-worktree

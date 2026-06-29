@@ -4,6 +4,32 @@
 
 版本号使用语义化版本（SemVer）：`MAJOR.MINOR.PATCH`。
 
+## [0.3.0] - 2026-06-29
+
+### Added
+
+- 角色确认后自动创建 TL、Mid.BE、Sr.FE、Mid.FE、FS 五个 worktree。
+- 新增 `--worktrees`、`--role-test-commits`、`--remote`、`--push`、`--sprint` 和 `--default-branch`。
+- 支持可选角色身份就绪提交，以及显式推送默认、Sprint、角色分支。
+- 新增 `Scrum/11_角色工作区与Git身份引导规范.md` 和本轮迭代计划。
+- 新增 `test/index.test.mjs` 基于 Node 内置 `node:test`，覆盖：角色 worktree 与身份隔离、`--config` 重放、`--dry-run` 不写盘、`--no-worktrees` 跳过 worktree、`--remote + --push` 推送到本地 bare 远端、`--push` 拒绝 `@example.com` 占位邮箱。
+- `package.json` 新增 `scripts.test`；`npm test` 一条命令跑全部测试。
+
+### Changed
+
+- 默认 Git 模式由 `workspace` 改为独立代码仓 `repo`。
+- 交互流程先展示角色全表，再按槽位调整名称与邮箱。
+- 个人分支改为 `feature/sprint-<n>/...`，避免与 `sprint-<n>` 引用冲突。
+- `roles.config.json` 增加角色邮箱。
+- `08_团队开发协作SOP.md §4.3` 明确：生成器已自动配置身份，本节命令仅用于手动重建或修正。
+- `知识库/项目模板/02_模板演进与反向回流指南.md` 提案分为"轻量提案"与"迭代计划"两种形式，后者范本指向 `03_角色工作区自动化迭代计划.md`；L3 检查项新增"`npm test` 全绿"。
+
+### Fixed
+
+- worktree Git 身份改用 `extensions.worktreeConfig` 与 `git config --worktree`，防止角色身份互相覆盖。
+- 修复 JSON 配置的 CLI 优先级标记未设置问题。
+- 独立代码仓 `.gitignore` 纳入自动化验证，确保 `TeamWork/` 不会误提交。
+
 ## [0.2.1] - 2026-06-26
 
 ### Added

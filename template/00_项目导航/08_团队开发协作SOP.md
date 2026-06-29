@@ -25,7 +25,7 @@
 
 | 工具 | 最低版本 | 验证命令 |
 | --- | --- | --- |
-| Git | 2.20+（支持 `git worktree`） | `git --version` |
+| Git | 2.28+（支持 `git init -b` 与 `git worktree`） | `git --version` |
 | Node.js | 项目技术栈而定，通常 ≥ 18 | `node -v` |
 | 代码编辑器 | 任意，推荐 VS Code | — |
 
@@ -56,7 +56,7 @@ ls -la 10_代码仓库/{{REPO_NAME}}/.git   # 内层是否有 .git
 
 | 外层 .git | 内层 .git | 你属于 | 提交去哪 |
 | :-: | :-: | --- | --- |
-| ✅ | ❌ | **模式 A**：单仓（默认 workspace） | 整个工作区一个仓库，统一提交 |
+| ✅ | ❌ | **模式 A**：单仓（可选 workspace） | 整个工作区一个仓库，统一提交 |
 | ❌ | ✅ | **模式 B**：仅代码仓 | 只提代码仓，文档不进 git（或文档另起 git） |
 | ✅ | ✅ | **模式 C**：两仓独立（生产推荐） | 代码进代码仓，文档进文档仓 |
 | ❌ | ❌ | 未初始化 | 找 FS 确认初始化策略 |
@@ -68,6 +68,10 @@ ls -la 10_代码仓库/{{REPO_NAME}}/.git   # 内层是否有 .git
 ## 4. 日常开发循环（编码角色）
 
 ### 4.1 一次性：克隆 + 建个人 worktree
+
+使用生成器默认 `repo` 模式时，5 个编码角色 worktree 已统一创建，直接检查
+`10_代码仓库/{{REPO_NAME}}/TeamWork/` 和 `roles.config.json` 即可。以下命令用于
+远端重新克隆、中途加入或手工修复。
 
 ```bash
 # 假设你的显示名是 Evan，槽位是 Mid.FE/QA
@@ -86,20 +90,20 @@ git switch sprint-1
 
 # 建个人 worktree（每个 Sprint 一次）
 mkdir -p TeamWork
-git worktree add TeamWork/Evan_MidFE_QA -b sprint-1/login-flow-evan-mid-fe-qa sprint-1
+git worktree add TeamWork/Evan_MidFE_QA -b feature/sprint-1/login-flow-evan-mid-fe-qa sprint-1
 ```
 
 ### 4.2 分支命名
 
 ```text
-sprint-<编号>/<短主题>-<英文名>-<角色代号>
+feature/sprint-<编号>/<短主题>-<英文名>-<角色代号>
 ```
 
 示例：
 ```text
-sprint-1/login-flow-evan-mid-fe-qa
-sprint-1/api-contract-ritchie-mid-be-qa
-sprint-1/ci-baseline-torvalds-fs-devops
+feature/sprint-1/login-flow-evan-mid-fe-qa
+feature/sprint-1/api-contract-ritchie-mid-be-qa
+feature/sprint-1/ci-baseline-torvalds-fs-devops
 ```
 
 - 全英文小写 + hyphen `-`
@@ -108,9 +112,20 @@ sprint-1/ci-baseline-torvalds-fs-devops
 
 ### 4.3 配置本机 Git 身份（每个 worktree 一次）
 
+> 生成器默认 `repo` 模式下**已自动**为 5 个角色 worktree 调用过 `extensions.worktreeConfig` 与 `--worktree user.name/user.email`。
+> 以下命令仅在**手动重建 worktree**、**修正错误身份**、或使用 `--no-worktrees` 后手工创建时才需要。
+
 ```bash
-git -C TeamWork/Evan_MidFE_QA config user.name  "Evan"
-git -C TeamWork/Evan_MidFE_QA config user.email "evan@example.com"
+git config extensions.worktreeConfig true
+git -C TeamWork/Evan_MidFE_QA config --worktree user.name  "Evan"
+git -C TeamWork/Evan_MidFE_QA config --worktree user.email "evan@example.com"
+```
+
+验证已生成的 worktree 身份：
+
+```bash
+git -C TeamWork/Evan_MidFE_QA config --worktree --get user.name
+git -C TeamWork/Evan_MidFE_QA log -1 --format='%an <%ae>'
 ```
 
 > **铁律**：禁止用统一账号代替真实提交身份。每个 commit 必须能追溯到具体人。
@@ -155,7 +170,7 @@ git fetch origin sprint-1
 git rebase origin/sprint-1     # 或 git merge --ff-only origin/sprint-1
 
 # 推送
-git push -u origin sprint-1/login-flow-evan-mid-fe-qa
+git push -u origin feature/sprint-1/login-flow-evan-mid-fe-qa
 ```
 
 ### 4.5 提交信息约定
@@ -261,7 +276,7 @@ git push
 ```bash
 cd <repo-root>
 git worktree remove TeamWork/Evan_MidFE_QA
-git branch -d sprint-1/login-flow-evan-mid-fe-qa   # 本地分支也清掉
+git branch -d feature/sprint-1/login-flow-evan-mid-fe-qa   # 本地分支也清掉
 ```
 
 ### 6.6 我作为新成员中途加入 Sprint
@@ -270,7 +285,7 @@ git branch -d sprint-1/login-flow-evan-mid-fe-qa   # 本地分支也清掉
 git clone <code-repo-url>
 cd {{REPO_NAME}}
 git fetch origin sprint-1
-git worktree add TeamWork/<Name>_<Role> -b sprint-1/<topic>-<name>-<role> origin/sprint-1
+git worktree add TeamWork/<Name>_<Role> -b feature/sprint-1/<topic>-<name>-<role> origin/sprint-1
 # 配身份 + 开始写代码
 ```
 
@@ -341,8 +356,8 @@ git worktree add TeamWork/Evan_Review -d origin/sprint-1
 ```text
 克隆          git clone <url>
 拉集成分支    git fetch origin sprint-1 && git switch sprint-1
-建 worktree   git worktree add TeamWork/<Name>_<Role> -b sprint-1/<topic>-<name>-<role> sprint-1
-配身份        git -C TeamWork/... config user.name/user.email
+建 worktree   git worktree add TeamWork/<Name>_<Role> -b feature/sprint-1/<topic>-<name>-<role> sprint-1
+配身份        git config extensions.worktreeConfig true；再使用 config --worktree
 日常          edit → test → add → commit → fetch → rebase → push
 提 PR         GitHub UI，目标 sprint-1
 合并          FS 操作，PR Review + CI 绿

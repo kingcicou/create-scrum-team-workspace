@@ -18,10 +18,10 @@
 
 ## Sprint 集成分支
 
-如果当前目录尚不是 Git 仓库，请先执行 `git init`，或创建项目时使用 `--git-root=repo`。
+生成器默认已经创建集成分支。手工初始化时执行：
 
 ```bash
-git switch -c sprint-1
+git switch -c sprint-{{SPRINT_NUMBER}}
 ```
 
 ## 角色工作区
@@ -44,6 +44,7 @@ New-Item -ItemType Directory -Force -Path TeamWork
 每个角色工作区都要配置本地身份：
 
 ```bash
+git config extensions.worktreeConfig true
 {{GIT_IDENTITY_COMMANDS}}
 ```
 
@@ -52,13 +53,13 @@ New-Item -ItemType Directory -Force -Path TeamWork
 推荐：
 
 ```text
-sprint-<number>/<short-topic>-<name>-<role>
+feature/sprint-<number>/<short-topic>-<name>-<role>
 ```
 
 示例：
 
 ```text
-sprint-1/initial-work-evan-mid-fe-qa
+feature/sprint-1/initial-work-evan-mid-fe-qa
 ```
 
 ## 最小验证命令

@@ -200,7 +200,13 @@ function parseArgs(argv) {
     preset: "tech",
     roleOverrides: {},
     emailOverrides: {},
-    gitRoot: "workspace",
+    gitRoot: "repo",
+    setupWorktrees: true,
+    roleTestCommits: false,
+    remoteUrl: "",
+    pushRemote: false,
+    defaultBranch: "main",
+    sprintNumber: 1,
     interactive: false,
     force: false,
     listPresets: false,
@@ -213,17 +219,71 @@ function parseArgs(argv) {
       result.projectName = arg;
       continue;
     }
-    if (arg === "--no-git") result.gitRoot = "none";
-    else if (arg === "--git") result.gitRoot = "workspace";
-    else if (arg.startsWith("--git-root=")) result.gitRoot = arg.slice("--git-root=".length);
+    if (arg === "--no-git") {
+      result.gitRoot = "none";
+      result.setupWorktrees = false;
+      result._gitRootFromCli = true;
+      result._worktreesFromCli = true;
+    } else if (arg === "--git") {
+      result.gitRoot = "repo";
+      result._gitRootFromCli = true;
+    } else if (arg.startsWith("--git-root=")) {
+      result.gitRoot = arg.slice("--git-root=".length);
+      result._gitRootFromCli = true;
+    }
+    else if (arg === "--worktrees") {
+      result.setupWorktrees = true;
+      result._worktreesFromCli = true;
+    }
+    else if (arg === "--no-worktrees") {
+      result.setupWorktrees = false;
+      result._worktreesFromCli = true;
+    }
+    else if (arg === "--role-test-commits") {
+      result.roleTestCommits = true;
+      result._roleTestCommitsFromCli = true;
+    }
+    else if (arg === "--no-role-test-commits") {
+      result.roleTestCommits = false;
+      result._roleTestCommitsFromCli = true;
+    }
+    else if (arg.startsWith("--remote=")) {
+      result.remoteUrl = arg.slice("--remote=".length);
+      result._remoteFromCli = true;
+    }
+    else if (arg === "--push") {
+      result.pushRemote = true;
+      result._pushFromCli = true;
+    }
+    else if (arg === "--no-push") {
+      result.pushRemote = false;
+      result._pushFromCli = true;
+    }
+    else if (arg.startsWith("--default-branch=")) {
+      result.defaultBranch = arg.slice("--default-branch=".length);
+      result._defaultBranchFromCli = true;
+    }
+    else if (arg.startsWith("--sprint=")) {
+      result.sprintNumber = Number(arg.slice("--sprint=".length));
+      result._sprintFromCli = true;
+    }
     else if (arg === "--list-presets") result.listPresets = true;
     else if (arg === "--interactive" || arg === "-i") result.interactive = true;
     else if (arg === "--force") result.force = true;
     else if (arg === "--dry-run" || arg === "-n") result.dryRun = true;
     else if (arg.startsWith("--config=")) result.configPath = arg.slice("--config=".length);
-    else if (arg.startsWith("--type=")) result.type = arg.slice("--type=".length);
-    else if (arg.startsWith("--preset=")) result.preset = arg.slice("--preset=".length);
-    else if (arg.startsWith("--roles=")) result.preset = arg.slice("--roles=".length);
+    else if (arg.startsWith("--type=")) {
+      result.type = arg.slice("--type=".length);
+      result._typeFromCli = true;
+    }
+    else if (arg.startsWith("--preset=")) {
+      result.preset = arg.slice("--preset=".length);
+      result._presetFromCli = true;
+    }
+    else if (arg.startsWith("--roles=")) {
+      result.preset = arg.slice("--roles=".length);
+      result._presetFromCli = true;
+    }
     else if (arg.startsWith("--repo=")) result.repoName = arg.slice("--repo=".length);
     else if (arg.startsWith("--role.")) {
       const [key, value = ""] = arg.slice("--role.".length).split("=");
@@ -258,6 +318,14 @@ function loadConfigFile(options) {
   if (raw.type && !options._typeFromCli) options.type = String(raw.type);
   if (raw.preset && !options._presetFromCli) options.preset = String(raw.preset);
   if (raw.gitRoot && !options._gitRootFromCli) options.gitRoot = String(raw.gitRoot);
+  if (typeof raw.setupWorktrees === "boolean" && !options._worktreesFromCli) options.setupWorktrees = raw.setupWorktrees;
+  if (typeof raw.roleTestCommits === "boolean" && !options._roleTestCommitsFromCli) {
+    options.roleTestCommits = raw.roleTestCommits;
+  }
+  if (raw.remoteUrl && !options._remoteFromCli) options.remoteUrl = String(raw.remoteUrl);
+  if (typeof raw.pushRemote === "boolean" && !options._pushFromCli) options.pushRemote = raw.pushRemote;
+  if (raw.defaultBranch && !options._defaultBranchFromCli) options.defaultBranch = String(raw.defaultBranch);
+  if (raw.sprintNumber && !options._sprintFromCli) options.sprintNumber = Number(raw.sprintNumber);
   if (raw.roles && typeof raw.roles === "object") {
     for (const [key, value] of Object.entries(raw.roles)) {
       const id = normalizeRoleId(key);
@@ -317,8 +385,8 @@ async function completeOptions(options) {
       rl,
       "Git 初始化模式",
       {
-        workspace: "整个项目工作区作为 Git 仓库（默认）",
-        repo: "只把代码仓库初始化为 Git",
+        repo: "代码仓库独立初始化（推荐，可自动创建角色 worktree）",
+        workspace: "整个项目工作区作为 Git 仓库",
         none: "不自动初始化",
       },
       options.gitRoot,
@@ -330,10 +398,19 @@ async function completeOptions(options) {
       options.preset,
     );
 
-    const customize = await ask(rl, "是否调整角色名称和邮箱？(y/N)", "N");
-    if (customize.trim().toLowerCase().startsWith("y")) {
-      const base = buildRoles(options.preset, options.roleOverrides, options.emailOverrides);
-      for (const slot of ROLE_SLOTS) {
+    console.log("\n当前角色配置：");
+    printRoleSummary(buildRoles(options.preset, options.roleOverrides, options.emailOverrides, options.sprintNumber));
+    const customize = await ask(
+      rl,
+      "要调整哪些角色？输入槽位并用逗号分隔（po,sm,tl,midbe,srfe,midfe,fs），all=全部，none=不调整",
+      "none",
+    );
+    if (customize.trim().toLowerCase() !== "none") {
+      const base = buildRoles(options.preset, options.roleOverrides, options.emailOverrides, options.sprintNumber);
+      const requested = customize.trim().toLowerCase() === "all"
+        ? new Set(ROLE_SLOTS.map((slot) => slot.id))
+        : new Set(customize.split(",").map((id) => normalizeRoleId(id.trim())));
+      for (const slot of ROLE_SLOTS.filter((item) => requested.has(item.id))) {
         const currentRole = base.find((role) => role.id === slot.id);
         const currentName = currentRole?.name || "";
         const nextName = await ask(rl, `${slot.shortTitle} 名称`, currentName);
@@ -347,19 +424,38 @@ async function completeOptions(options) {
 
     if (!PROJECT_TYPES[options.type]) options.type = "new";
     if (!ROLE_PRESETS[options.preset]) options.preset = "tech";
-    if (!["workspace", "repo", "none"].includes(options.gitRoot)) options.gitRoot = "workspace";
+    if (!["workspace", "repo", "none"].includes(options.gitRoot)) options.gitRoot = "repo";
+    if (options.gitRoot === "repo") {
+      const setup = await ask(rl, "是否统一创建 5 个编码角色 worktree？(Y/n)", "Y");
+      options.setupWorktrees = !setup.trim().toLowerCase().startsWith("n");
+      if (options.setupWorktrees) {
+        const testCommits = await ask(rl, "是否为每个角色创建身份就绪测试提交？(y/N)", "N");
+        options.roleTestCommits = testCommits.trim().toLowerCase().startsWith("y");
+      }
+      options.remoteUrl = await ask(rl, "远端代码仓库地址（留空则不配置）", "");
+      if (options.remoteUrl) {
+        const push = await ask(rl, "是否推送 main、Sprint 分支和角色分支到远端？(y/N)", "N");
+        options.pushRemote = push.trim().toLowerCase().startsWith("y");
+      }
+    } else {
+      options.setupWorktrees = false;
+      options.roleTestCommits = false;
+    }
 
-    const summaryRoles = buildRoles(options.preset, options.roleOverrides, options.emailOverrides);
+    const summaryRoles = buildRoles(options.preset, options.roleOverrides, options.emailOverrides, options.sprintNumber);
+    validateOptions(options);
+    validateRoles(summaryRoles, options.pushRemote);
     console.log("\n=== 即将创建的工作区 ===");
     console.log(`项目名称：${options.projectName}`);
     console.log(`项目类型：${PROJECT_TYPES[options.type]}`);
     console.log(`代码仓库：${options.repoName || `${slug(options.projectName)}-app`}`);
     console.log(`Git 模式：${options.gitRoot}`);
+    console.log(`角色工作区：${options.setupWorktrees ? "统一创建" : "不创建"}`);
+    console.log(`角色测试提交：${options.roleTestCommits ? "创建" : "不创建"}`);
+    console.log(`远端：${options.remoteUrl || "不配置"}${options.pushRemote ? "（生成后推送）" : ""}`);
     console.log(`角色套装：${ROLE_PRESETS[options.preset].label}`);
     console.log("角色与邮箱：");
-    for (const role of summaryRoles) {
-      console.log(`  - ${role.shortTitle.padEnd(10)} ${role.name.padEnd(16)} ${role.email}`);
-    }
+    printRoleSummary(summaryRoles);
     if (options.dryRun) console.log("模式：dry-run（不写入文件）");
     console.log("========================\n");
     const confirm = await ask(rl, "确认开始生成？(Y/n)", "Y");
@@ -371,6 +467,13 @@ async function completeOptions(options) {
     rl.close();
   }
   return options;
+}
+
+function printRoleSummary(roles) {
+  for (const role of roles) {
+    const workspace = role.worktree ? role.dirName : "（无编码工作区）";
+    console.log(`  - ${role.id.padEnd(6)} ${role.shortTitle.padEnd(10)} ${role.name.padEnd(16)} ${role.email.padEnd(28)} ${workspace}`);
+  }
 }
 
 async function ask(rl, label, defaultValue) {
@@ -386,7 +489,7 @@ async function askChoice(rl, label, choices, defaultKey) {
   return choices[key] ? key : defaultKey;
 }
 
-function buildRoles(presetKey, overrides, emailOverrides = {}) {
+function buildRoles(presetKey, overrides, emailOverrides = {}, sprintNumber = 1) {
   const preset = ROLE_PRESETS[presetKey] || ROLE_PRESETS.tech;
   return ROLE_SLOTS.map((slot) => {
     const name = overrides[slot.id] || preset.names[slot.id];
@@ -396,7 +499,9 @@ function buildRoles(presetKey, overrides, emailOverrides = {}) {
       ...slot,
       name,
       dirName: `${safePathSegment(name, slot.id)}_${slot.roleCode}`,
-      branchName: `sprint-1/${slug("initial-work")}-${nameSlug}-${slot.branchRole}`,
+      branchName: slot.worktree
+        ? `feature/sprint-${sprintNumber}/initial-work-${nameSlug}-${slot.branchRole}`
+        : "",
       email,
     };
   });
@@ -422,6 +527,58 @@ function safePathSegment(value, fallback = "member") {
   );
 }
 
+function validateOptions(options) {
+  if (!Number.isInteger(options.sprintNumber) || options.sprintNumber < 0) {
+    throw new Error("--sprint 必须是大于或等于 0 的整数。");
+  }
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(options.defaultBranch)) {
+    throw new Error("--default-branch 只能包含字母、数字、点、下划线和连字符。");
+  }
+  if (options.pushRemote && !options.remoteUrl) {
+    throw new Error("--push 必须与 --remote=<url> 一起使用。");
+  }
+  if (options.setupWorktrees && options.gitRoot !== "repo") {
+    throw new Error("自动角色 worktree 仅支持 --git-root=repo；请改用独立代码仓模式或加 --no-worktrees。");
+  }
+  if (options.roleTestCommits && !options.setupWorktrees) {
+    throw new Error("--role-test-commits 需要启用角色 worktree。");
+  }
+}
+
+function validateRoles(roles, requireRealEmails = false) {
+  const names = new Set();
+  const emails = new Set();
+  for (const role of roles) {
+    const normalizedName = role.name.trim().toLowerCase();
+    const normalizedEmail = role.email.trim().toLowerCase();
+    if (!role.name.trim()) throw new Error(`角色 ${role.id} 的名称不能为空。`);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(role.email)) {
+      throw new Error(`角色 ${role.id} 的邮箱格式无效：${role.email}`);
+    }
+    if (requireRealEmails && /@(example\.(com|org|net)|localhost)$/i.test(role.email)) {
+      throw new Error(`推送远端前必须为角色 ${role.id} 配置真实邮箱，当前为：${role.email}`);
+    }
+    if (names.has(normalizedName)) throw new Error(`角色名称不能重复：${role.name}`);
+    if (emails.has(normalizedEmail)) throw new Error(`角色邮箱不能重复：${role.email}`);
+    names.add(normalizedName);
+    emails.add(normalizedEmail);
+  }
+}
+
+function safeRemoteUrl(remoteUrl) {
+  if (!remoteUrl) return "";
+  try {
+    const parsed = new URL(remoteUrl);
+    if (parsed.username || parsed.password) {
+      parsed.username = "";
+      parsed.password = "";
+    }
+    return parsed.toString();
+  } catch {
+    return remoteUrl;
+  }
+}
+
 function buildReplacements(options, roles) {
   const preset = ROLE_PRESETS[options.preset] || ROLE_PRESETS.tech;
   const projectName = options.projectName;
@@ -439,28 +596,42 @@ function buildReplacements(options, roles) {
     ROLE_PRESET: options.preset,
     ROLE_PRESET_LABEL: preset.label,
     CREATED_DATE: today,
+    SPRINT_NUMBER: String(options.sprintNumber),
+    DEFAULT_BRANCH: options.defaultBranch,
     ROLE_TABLE: renderRoleTable(roles),
     ROLE_CARDS: renderRoleCards(roles),
     ABILITY_MATRIX: renderAbilityMatrix(roles),
     BACKUP_TABLE: renderBackupTable(roles),
     WORKTREE_DIRS: worktreeRoles.map((role) => `  ${role.dirName}/`).join("\n"),
     WORKTREE_COMMANDS: worktreeRoles
-      .map((role) => `git worktree add TeamWork/${role.dirName} -b ${role.branchName} sprint-1`)
+      .map((role) => `git worktree add TeamWork/${role.dirName} -b ${role.branchName} sprint-${options.sprintNumber}`)
       .join("\n"),
     GIT_IDENTITY_COMMANDS: worktreeRoles
       .map(
         (role) =>
-          `git -C TeamWork/${role.dirName} config user.name "${role.name}"\ngit -C TeamWork/${role.dirName} config user.email "${role.email}"`,
+          `git -C TeamWork/${role.dirName} config --worktree user.name "${role.name}"\ngit -C TeamWork/${role.dirName} config --worktree user.email "${role.email}"`,
       )
       .join("\n\n"),
     SPRINT0_ASSIGNMENTS: renderSprint0Assignments(roles),
     ROLE_JSON: JSON.stringify(
       {
+        projectName,
+        repoName,
+        type: options.type,
         preset: options.preset,
-        presetLabel: preset.label,
-        roles: roles.map(({ id, name, roleCode, title, hats, skills, backup, worktree, dirName, branchName }) => ({
+        gitRoot: options.gitRoot,
+        setupWorktrees: options.setupWorktrees,
+        roleTestCommits: options.roleTestCommits,
+        remoteUrl: safeRemoteUrl(options.remoteUrl),
+        pushRemote: false,
+        defaultBranch: options.defaultBranch,
+        sprintNumber: options.sprintNumber,
+        roles: Object.fromEntries(roles.map((role) => [role.id, role.name])),
+        emails: Object.fromEntries(roles.map((role) => [role.id, role.email])),
+        roleDetails: roles.map(({ id, name, email, roleCode, title, hats, skills, backup, worktree, dirName, branchName }) => ({
           id,
           name,
+          email,
           roleCode,
           title,
           hats,
@@ -491,9 +662,9 @@ function renderPresetOptions() {
 
 function renderRoleTable(roles) {
   return [
-    "| 槽位 | 名称 | 主身份 | 兼任帽子 | 技能重点 | 备份机制 |",
-    "| --- | --- | --- | --- | --- | --- |",
-    ...roles.map((role) => `| ${role.id} | ${role.name} | ${role.title} | ${role.hats} | ${role.skills} | ${role.backup} |`),
+    "| 槽位 | 名称 | 邮箱 | 主身份 | 兼任帽子 | 编码工作区 | 备份机制 |",
+    "| --- | --- | --- | --- | --- | --- | --- |",
+    ...roles.map((role) => `| ${role.id} | ${role.name} | ${role.email} | ${role.title} | ${role.hats} | ${role.worktree ? role.dirName : "不创建"} | ${role.backup} |`),
   ].join("\n");
 }
 
@@ -609,25 +780,102 @@ function ensureCanWrite(target, force) {
   }
 }
 
-function maybeGitInit(target, gitRoot, repoName) {
-  if (gitRoot === "none") return;
-  const gitTarget = gitRoot === "repo" ? path.join(target, "10_代码仓库", repoName) : target;
-  const init = spawnSync("git", ["init"], { cwd: gitTarget, encoding: "utf8" });
-  if (init.status !== 0) {
-    if (init.stderr) console.warn(`git init 失败：${init.stderr.trim()}`);
-    return;
-  }
-  spawnSync("git", ["add", "."], { cwd: gitTarget, stdio: "ignore" });
-  const commit = spawnSync("git", ["commit", "-m", "chore: initialize scrum team workspace"], {
-    cwd: gitTarget,
+function runGit(cwd, args, options = {}) {
+  const result = spawnSync("git", args, {
+    cwd,
     encoding: "utf8",
+    env: options.env ? { ...process.env, ...options.env } : process.env,
   });
-  if (commit.status !== 0) {
-    const detail = (commit.stderr || commit.stdout || "").trim();
-    console.warn(
-      `Git 已初始化，但首次提交失败。请检查 git user.name/user.email 后手动提交。${detail ? `\n${detail}` : ""}`,
-    );
+  if (result.status !== 0 && !options.allowFailure) {
+    const detail = (result.stderr || result.stdout || "").trim();
+    throw new Error(`Git 命令失败：git ${args.join(" ")}${detail ? `\n${detail}` : ""}`);
   }
+  return result;
+}
+
+function commitEnvironment(role) {
+  return {
+    GIT_AUTHOR_NAME: role.name,
+    GIT_AUTHOR_EMAIL: role.email,
+    GIT_COMMITTER_NAME: role.name,
+    GIT_COMMITTER_EMAIL: role.email,
+  };
+}
+
+function setupGitWorkspace(target, options, repoName, roles) {
+  if (options.gitRoot === "none") return { gitTarget: "", worktrees: [] };
+
+  const gitTarget = options.gitRoot === "repo"
+    ? path.join(target, "10_代码仓库", repoName)
+    : target;
+  const fsRole = roles.find((role) => role.id === "fs");
+  const sprintBranch = `sprint-${options.sprintNumber}`;
+
+  runGit(gitTarget, ["init", "-b", options.defaultBranch]);
+  runGit(gitTarget, ["add", "."]);
+  const commit = runGit(
+    gitTarget,
+    ["commit", "-m", "chore: initialize scrum team workspace"],
+    { env: commitEnvironment(fsRole), allowFailure: true },
+  );
+  const hasHead = runGit(gitTarget, ["rev-parse", "--verify", "HEAD"], { allowFailure: true }).status === 0;
+  if (!hasHead) {
+    const detail = (commit.stderr || commit.stdout || "").trim();
+    throw new Error(`Git 首次提交失败。${detail ? `\n${detail}` : ""}`);
+  }
+
+  runGit(gitTarget, ["config", "extensions.worktreeConfig", "true"]);
+  runGit(gitTarget, ["config", "--worktree", "user.name", fsRole.name]);
+  runGit(gitTarget, ["config", "--worktree", "user.email", fsRole.email]);
+
+  const sprintExists = runGit(gitTarget, ["show-ref", "--verify", "--quiet", `refs/heads/${sprintBranch}`], {
+    allowFailure: true,
+  }).status === 0;
+  if (!sprintExists) runGit(gitTarget, ["branch", sprintBranch, options.defaultBranch]);
+
+  if (options.remoteUrl) {
+    const currentRemote = runGit(gitTarget, ["remote", "get-url", "origin"], { allowFailure: true });
+    if (currentRemote.status === 0 && currentRemote.stdout.trim() !== options.remoteUrl) {
+      throw new Error(`origin 已存在且地址不同：${currentRemote.stdout.trim()}`);
+    }
+    if (currentRemote.status !== 0) runGit(gitTarget, ["remote", "add", "origin", options.remoteUrl]);
+  }
+
+  const worktrees = [];
+  if (options.setupWorktrees) {
+    const teamworkDir = path.join(gitTarget, "TeamWork");
+    fs.mkdirSync(teamworkDir, { recursive: true });
+    for (const role of roles.filter((item) => item.worktree)) {
+      const worktreePath = path.join(teamworkDir, role.dirName);
+      if (fs.existsSync(worktreePath)) {
+        throw new Error(`角色工作区已存在，拒绝覆盖：${worktreePath}`);
+      }
+      runGit(gitTarget, ["worktree", "add", worktreePath, "-b", role.branchName, sprintBranch]);
+      runGit(worktreePath, ["config", "--worktree", "user.name", role.name]);
+      runGit(worktreePath, ["config", "--worktree", "user.email", role.email]);
+
+      if (options.roleTestCommits) {
+        const readinessDir = path.join(worktreePath, ".team", "readiness");
+        fs.mkdirSync(readinessDir, { recursive: true });
+        const readinessFile = path.join(readinessDir, `${role.id}.md`);
+        fs.writeFileSync(
+          readinessFile,
+          `# ${role.name} workspace readiness\n\n- Role: ${role.title}\n- Branch: ${role.branchName}\n- Git email: ${role.email}\n- Generated: ${new Date().toISOString()}\n`,
+          "utf8",
+        );
+        runGit(worktreePath, ["add", `.team/readiness/${role.id}.md`]);
+        runGit(worktreePath, ["commit", "-m", `test(team): verify ${role.id} workspace identity`]);
+      }
+      worktrees.push({ role, path: worktreePath });
+    }
+  }
+
+  if (options.pushRemote) {
+    const branches = [options.defaultBranch, sprintBranch, ...worktrees.map(({ role }) => role.branchName)];
+    runGit(gitTarget, ["push", "-u", "origin", ...branches]);
+  }
+
+  return { gitTarget, worktrees, sprintBranch };
 }
 
 function printHelp() {
@@ -642,16 +890,23 @@ function printHelp() {
   --repo=<repo-name>
   --role.<slot>=<name>           槽位: po|sm|tl|midbe|srfe|midfe|fs
   --email.<slot>=<email>         为某角色配置真实邮箱
+  --worktrees | --no-worktrees  是否创建 5 个编码角色 worktree（repo 模式默认创建）
+  --role-test-commits           每个角色分支创建一条身份就绪测试提交
+  --remote=<url>                配置代码仓库 origin，不会自动推送
+  --push | --no-push            是否将 main、sprint 和角色分支推送到 origin
+  --default-branch=<name>       默认分支名，默认 main
+  --sprint=<number>             初始 Sprint 编号，默认 1
   --config=<path.json>           从 JSON 配置文件读取参数（CLI 优先级更高）
   --interactive | -i             交互式创建（含摘要确认）
   --dry-run | -n                 仅预览将创建的文件，不写入磁盘
   --list-presets
-  --git-root=workspace|repo|none
+  --git-root=repo|workspace|none（默认 repo）
   --no-git
   --force                        允许写入非空目录
 
 示例:
   node index.mjs acme-ark --type=legacy --preset=greek --role.midfe=Aurora
+  node index.mjs acme-ark --remote=git@github.com:acme/ark.git --role-test-commits --push
   node index.mjs acme-ark --config=./scrum.config.json --dry-run
 
 配置文件示例 (JSON):
@@ -660,7 +915,13 @@ function printHelp() {
     "repoName": "acme-ark-app",
     "type": "new",
     "preset": "tech",
-    "gitRoot": "workspace",
+    "gitRoot": "repo",
+    "setupWorktrees": true,
+    "roleTestCommits": false,
+    "remoteUrl": "git@github.com:acme/acme-ark-app.git",
+    "pushRemote": false,
+    "defaultBranch": "main",
+    "sprintNumber": 1,
     "roles": { "midfe": "Aurora" },
     "emails": { "po": "po@example.com" }
   }
@@ -690,9 +951,13 @@ async function main() {
   }
   if (!PROJECT_TYPES[options.type]) options.type = "new";
   if (!ROLE_PRESETS[options.preset]) options.preset = "tech";
-  if (!["workspace", "repo", "none"].includes(options.gitRoot)) options.gitRoot = "workspace";
+  if (!["workspace", "repo", "none"].includes(options.gitRoot)) options.gitRoot = "repo";
+  if (options.gitRoot !== "repo" && !options._worktreesFromCli) options.setupWorktrees = false;
+  if (!options.setupWorktrees) options.roleTestCommits = false;
 
-  const roles = buildRoles(options.preset, options.roleOverrides, options.emailOverrides);
+  validateOptions(options);
+  const roles = buildRoles(options.preset, options.roleOverrides, options.emailOverrides, options.sprintNumber);
+  validateRoles(roles, options.pushRemote);
   const replacements = buildReplacements(options, roles);
   const target = path.resolve(process.cwd(), options.projectName);
 
@@ -704,6 +969,9 @@ async function main() {
     console.log(`[dry-run] 角色套装：${replacements.ROLE_PRESET_LABEL}`);
     console.log(`[dry-run] 代码仓库骨架：10_代码仓库/${replacements.REPO_NAME}`);
     console.log(`[dry-run] Git 模式：${options.gitRoot}`);
+    console.log(`[dry-run] 角色 worktree：${options.setupWorktrees ? "5 个" : "不创建"}`);
+    console.log(`[dry-run] 角色测试提交：${options.roleTestCommits ? "创建" : "不创建"}`);
+    console.log(`[dry-run] 远端：${options.remoteUrl || "不配置"}${options.pushRemote ? "（将推送）" : ""}`);
     console.log(`[dry-run] 计划创建 ${plan.filter((i) => i.type === "dir").length} 个目录、${plan.filter((i) => i.type === "file").length} 个文件。`);
     for (const item of plan) {
       const rel = path.relative(target, item.dest) || ".";
@@ -714,12 +982,17 @@ async function main() {
 
   ensureCanWrite(target, options.force);
   applyTemplatePlan(plan, replacements);
-  maybeGitInit(target, options.gitRoot, replacements.REPO_NAME);
+  const gitResult = setupGitWorkspace(target, options, replacements.REPO_NAME, roles);
 
   console.log(`\n已创建 Scrum 团队协同工作区：${target}`);
   console.log(`项目类型：${replacements.PROJECT_TYPE_LABEL}`);
   console.log(`角色套装：${replacements.ROLE_PRESET_LABEL}`);
   console.log(`代码仓库骨架：10_代码仓库/${replacements.REPO_NAME}`);
+  if (gitResult.gitTarget) {
+    console.log(`Git 仓库：${gitResult.gitTarget}`);
+    console.log(`Sprint 集成分支：${gitResult.sprintBranch}`);
+    console.log(`角色 worktree：${gitResult.worktrees.length} 个`);
+  }
   console.log("\n下一步：");
   console.log("1. 打开 00_项目导航/00_项目首页.md");
   console.log("2. 检查 00_项目导航/02_角色与联系方式.md");
