@@ -289,24 +289,99 @@ test("generates Sprint flow monitor with named role actions and no stale progres
       false,
     );
 
-    const outputLedger = fs.readFileSync(
-      path.join(target, "00_项目导航", "06_团队输入输出总表.md"),
-      "utf8",
-    );
+    const ledgerDir = path.join(target, "00_项目导航", "06_团队输入输出总表");
+    const ledgerIndex = fs.readFileSync(path.join(ledgerDir, "00_索引.md"), "utf8");
+    const ledgerA = fs.readFileSync(path.join(ledgerDir, "A_项目管理.md"), "utf8");
+    const ledgerE = fs.readFileSync(path.join(ledgerDir, "E_发布运维.md"), "utf8");
+    assert.ok(ledgerIndex.includes("[A_项目管理.md](A_项目管理.md)"), "index should link to A");
+    assert.ok(ledgerIndex.includes("owner: SM"), "index frontmatter should declare owner");
+    assert.ok(ledgerA.includes("| A07 | P0 | Sprint 0 流程监控台 |"));
+    assert.ok(ledgerA.includes("| A08 | P1 | SM 教练查询与回复模板 |"));
+    assert.ok(ledgerA.includes("| A09 | P0 | 文档协作与并发控制规范"));
     assert.ok(
-      outputLedger.includes("待手工创建角色 worktree"),
+      ledgerE.includes("待手工创建角色 worktree"),
       "--no-git should render the manual TeamWork path",
     );
-    assert.ok(outputLedger.includes("参考 08_团队开发协作SOP.md §4.1 手工创建"));
-    assert.ok(outputLedger.includes("| A07 | P0 | Sprint 0 流程监控台 |"));
-    assert.ok(outputLedger.includes("| A08 | P1 | SM 教练查询与回复模板 |"));
-    assert.equal(/\{\{TEAMWORK_[A-Z_]+\}\}/.test(outputLedger), false);
+    assert.ok(ledgerE.includes("参考 08_团队开发协作SOP.md §4.1 手工创建"));
+    assert.equal(/\{\{TEAMWORK_[A-Z_]+\}\}/.test(ledgerE), false);
 
     const responseContent = fs.readFileSync(responseTemplate, "utf8");
     assert.ok(responseContent.includes("## 2. 关键因果链"));
     assert.ok(responseContent.includes("## 3. 当前并行泳道"));
     assert.ok(responseContent.includes("## 4. 下一汇合门"));
     assert.ok(responseContent.includes("完成后会解锁"));
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("v0.4.0 splits 06 ledger into per-role tables and emits CODEOWNERS", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-04-"));
+  const target = path.join(sandbox, "project");
+
+  try {
+    runCli([target, "--preset=tech", "--repo=v04-app", "--no-git", "--no-worktrees"]);
+
+    const ledgerDir = path.join(target, "00_项目导航", "06_团队输入输出总表");
+    const oldFile = path.join(target, "00_项目导航", "06_团队输入输出总表.md");
+
+    assert.equal(fs.existsSync(oldFile), false, "old single-file ledger should be removed");
+    assert.ok(fs.existsSync(ledgerDir), "ledger directory should exist");
+
+    const subFiles = ["00_索引.md", "A_项目管理.md", "B_产品发现.md", "C_工程设计.md", "D_质量验证.md", "E_发布运维.md", "F_度量改进.md"];
+    for (const file of subFiles) {
+      const full = path.join(ledgerDir, file);
+      assert.ok(fs.existsSync(full), `${file} should be generated`);
+      const content = fs.readFileSync(full, "utf8");
+      assert.ok(/^---\r?\nowner:/m.test(content), `${file} should have frontmatter with owner`);
+      assert.ok(/status:\s*(draft|review|approved|locked)/m.test(content), `${file} status should be valid`);
+    }
+
+    // Owner mapping per file
+    const expectations = {
+      "A_项目管理.md": /owner:\s*SM/,
+      "B_产品发现.md": /owner:\s*PO/,
+      "C_工程设计.md": /owner:\s*TL/,
+      "D_质量验证.md": /owner:\s*\[Mid\.BE,\s*Mid\.FE\]/,
+      "E_发布运维.md": /owner:\s*FS/,
+      "F_度量改进.md": /owner:\s*SM/,
+    };
+    for (const [file, regex] of Object.entries(expectations)) {
+      const content = fs.readFileSync(path.join(ledgerDir, file), "utf8");
+      assert.match(content, regex, `${file} owner mismatch`);
+    }
+
+    // CODEOWNERS generated with real role names substituted in comments
+    const codeowners = path.join(target, ".github", "CODEOWNERS");
+    assert.ok(fs.existsSync(codeowners), "CODEOWNERS should be emitted under .github/");
+    const owners = fs.readFileSync(codeowners, "utf8");
+    assert.ok(owners.includes("Jobs"), "tech preset PO name should be substituted");
+    assert.ok(owners.includes("Sutherland"), "tech preset SM name should be substituted");
+    assert.ok(owners.includes("Torvalds"), "tech preset FS name should be substituted");
+    assert.ok(owners.includes("06_团队输入输出总表/A_*"), "owners should cover ledger sub-files");
+    assert.ok(owners.includes("@<sm-github>"), "placeholders for github user kept");
+
+    // 13 spec and 04 iteration plan must exist in knowledge base
+    assert.ok(
+      fs.existsSync(path.join(target, "知识库", "Scrum", "13_文档协作与并发控制规范.md")),
+      "13 spec should exist",
+    );
+    assert.ok(
+      fs.existsSync(path.join(target, "知识库", "项目模板", "04_文档协作机制迭代计划.md")),
+      "04 iteration plan should exist",
+    );
+
+    // 05 management spec should reference 13 spec
+    const mgmtSpec = fs.readFileSync(path.join(target, "00_项目导航", "05_输入输出管理规范.md"), "utf8");
+    assert.ok(mgmtSpec.includes("13_文档协作与并发控制规范"), "05 spec should link to 13");
+    assert.match(mgmtSpec, /^---\r?\nowner:\s*SM/m, "05 spec should have frontmatter");
+
+    // 00 home page index should point to new ledger entry
+    const home = fs.readFileSync(path.join(target, "00_项目导航", "00_项目首页.md"), "utf8");
+    assert.ok(
+      home.includes("06_团队输入输出总表/00_索引.md"),
+      "home page should link to ledger index",
+    );
   } finally {
     fs.rmSync(sandbox, { recursive: true, force: true });
   }

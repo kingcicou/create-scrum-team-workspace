@@ -4,6 +4,50 @@
 
 版本号使用语义化版本（SemVer）：`MAJOR.MINOR.PATCH`。
 
+## [0.4.0] - 2026-06-29
+
+### Added
+
+- **多人协作并发控制机制**（机制级重构）
+  - 新增 `知识库/Scrum/13_文档协作与并发控制规范.md`：9 层防御机制，针对 12 类冲突场景（总表竞争、设计文档稀释、评审拥挤等）
+  - 新增 `知识库/项目模板/04_文档协作机制迭代计划.md`：本轮需求、候选方案评估、采纳决策、验收与 DoD
+- **`06_团队输入输出总表` 拆为按角色分表目录**
+  - `00_索引.md`（owner: SM）+ `A-F_*.md` 6 个分表，每份 frontmatter 声明唯一 owner
+  - A_项目管理/SM、B_产品发现/PO、C_工程设计/TL、D_质量验证/Mid.BE+Mid.FE、E_发布运维/FS、F_度量改进/SM（允许评审段追加）
+  - 保留原有 ID（A01..F0x）不变，仅文件路径从单件移到分件
+- **平台护栏**：新增 `template/_github/CODEOWNERS`（生成为 `.github/CODEOWNERS`）
+  - 7 角色映射占位符 `<*-github>`，生成时填充真实角色名作为注释
+  - 按路径 glob 自动指派 reviewer，覆盖 06 分表、产品、工程、质量、发布、知识库
+- **关键协作文档加 Frontmatter**
+  - 06 分表、7 个；owner 与评审者明确、`status: review/approved`、`version`、`last-updated`
+  - `05_输入输出管理规范.md` 添加 frontmatter 与 §11 多人协作并发控制
+- **生成器增强**
+  - 新增 `roleNameById` 辅助函数与 7 个 `ROLE_*_NAME` 占位符，供 CODEOWNERS 注释里的角色名替换
+  - `renderName` 增加 `_github → .github` 转换，避免 npm publish 丢失 dotfile
+  - `applyTemplatePlan` 读取模板时剥离 UTF-8 BOM，防御工具链差异
+
+### Changed
+
+- `00_项目首页.md` 中 06 总表入口改为 `06_团队输入输出总表/00_索引.md`，新增 13 规范与 CODEOWNERS 链接
+- `SM 作战手册` 反模式自检加一条：“我是否在替 owner 做内容合并”
+- 10 个文档中原指向 `06_团队输入输出总表.md` 的引用批量更新为 `06_团队输入输出总表/00_索引.md`
+- 知识库总目录、`知识库/README.md`、`Scrum/99_来源索引.md`、`项目模板/01_模板需求提取与差距修正.md` 同步登记 13 与 04
+- 测试补 1 个 case（`v0.4.0 splits 06 ledger ...`）：验证 06 拆分、CODEOWNERS 生成、frontmatter 存在、原 06 单文件已删除
+
+### Removed
+
+- 原 `template/00_项目导航/06_团队输入输出总表.md` 单文件（被拆分为目录）
+
+### Fixed
+
+- 10 个模板 md 文件中意外的 UTF-8 BOM（来自之前 PowerShell `Set-Content -Encoding UTF8` 写入）全部剥离
+
+### 设计动机
+
+- **为什么不采用“SM 统一合并”方案**：SM 成单点瓶颈，违反 Scrum “不替决”原则；且产生“草稿表 + 主表”双事实源。采用 Frontmatter + PR + CODEOWNERS 是业界应对同类问题的成熟机制。
+- **为什么 06 总表仅拆到角色粒度**：再拆下去会引入。逻辑聡合问题；F 度量改进是唯一“多人参与”场景，用 §3 评审段追加协议解决。
+- **为什么 CODEOWNERS 不默认填充真实账号**：生成器不知道 GitHub 账号与角色的映射；用占位符 + Sprint 0 必做清单让团队显式填入。
+
 ## [0.3.4] - 2026-06-29
 
 ### Added

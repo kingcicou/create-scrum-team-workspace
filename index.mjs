@@ -662,6 +662,13 @@ function buildReplacements(options, roles) {
     TEAMWORK_FLOW_GAP: options.setupWorktrees
       ? "验证身份和远端权限"
       : "创建 Git 仓库和角色 worktree",
+    ROLE_PO_NAME: roleNameById(roles, "po"),
+    ROLE_SM_NAME: roleNameById(roles, "sm"),
+    ROLE_TL_NAME: roleNameById(roles, "tl"),
+    ROLE_MIDBE_NAME: roleNameById(roles, "midbe"),
+    ROLE_SRFE_NAME: roleNameById(roles, "srfe"),
+    ROLE_MIDFE_NAME: roleNameById(roles, "midfe"),
+    ROLE_FS_NAME: roleNameById(roles, "fs"),
     ROLE_TABLE: renderRoleTable(roles),
     ROLE_CARDS: renderRoleCards(roles),
     ABILITY_MATRIX: renderAbilityMatrix(roles),
@@ -731,6 +738,10 @@ function renderRoleTable(roles) {
     "| --- | --- | --- | --- | --- | --- | --- |",
     ...roles.map((role) => `| ${role.id} | ${role.name} | ${role.email} | ${role.title} | ${role.hats} | ${role.worktree ? role.dirName : "不创建"} | ${role.backup} |`),
   ].join("\n");
+}
+
+function roleNameById(roles, id) {
+  return roles.find((role) => role.id === id)?.name ?? id;
 }
 
 function renderRoleCards(roles) {
@@ -813,6 +824,7 @@ function renderName(name, replacements) {
   let next = name;
   if (next === "_gitignore") next = ".gitignore";
   if (next === "_vscode") next = ".vscode";
+  if (next === "_github") next = ".github";
   next = applyTemplate(next, replacements);
   next = next.replace(/__([A-Z0-9_]+)__/g, (match, key) => {
     if (!Object.prototype.hasOwnProperty.call(replacements, key)) return match;
@@ -844,7 +856,7 @@ function applyTemplatePlan(plan, replacements) {
     if (item.type === "dir") {
       fs.mkdirSync(item.dest, { recursive: true });
     } else {
-      const text = fs.readFileSync(item.src, "utf8");
+      const text = fs.readFileSync(item.src, "utf8").replace(/^\uFEFF/, "");
       fs.mkdirSync(path.dirname(item.dest), { recursive: true });
       fs.writeFileSync(item.dest, applyTemplate(text, replacements), "utf8");
     }

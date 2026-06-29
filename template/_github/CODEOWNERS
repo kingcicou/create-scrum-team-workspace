@@ -1,0 +1,75 @@
+# CODEOWNERS · {{PROJECT_NAME}}
+#
+# 文档协作与并发控制规范的平台护栏（详见 知识库/Scrum/13_文档协作与并发控制规范.md）
+#
+# ⚠️ Sprint 0 必做：把下列 `<*-github>` 占位符替换为对应角色的真实 GitHub/GitLab/Codeup 用户名。
+# 角色名占位策略：
+#   <po-github>     → 替换为 PO（{{ROLE_PO_NAME}}）的账号
+#   <sm-github>     → 替换为 SM（{{ROLE_SM_NAME}}）的账号
+#   <tl-github>     → 替换为 TL/Sr.BE（{{ROLE_TL_NAME}}）
+#   <midbe-github>  → 替换为 Mid.BE/QA API（{{ROLE_MIDBE_NAME}}）
+#   <srfe-github>   → 替换为 Sr.FE/UX（{{ROLE_SRFE_NAME}}）
+#   <midfe-github>  → 替换为 Mid.FE/QA E2E（{{ROLE_MIDFE_NAME}}）
+#   <fs-github>     → 替换为 FS/DevOps（{{ROLE_FS_NAME}}）
+#
+# 语法：每行 = 路径 glob + 一个或多个 @用户名（GitLab/Codeup 类似）
+# 多个 owner 之间空格分隔；最后匹配的规则胜出（GitHub 默认行为）
+
+# ===== 全局兜底 =====
+*   @<sm-github>
+
+# ===== 00_项目导航 =====
+00_项目导航/00_项目首页.md                                @<sm-github>
+00_项目导航/01_团队工作协议.md                            @<sm-github> @<po-github>
+00_项目导航/02_角色与联系方式.md                          @<sm-github>
+00_项目导航/03_工具与权限清单.md                          @<sm-github> @<fs-github>
+00_项目导航/05_输入输出管理规范.md                        @<sm-github> @<po-github> @<tl-github>
+00_项目导航/06_团队输入输出总表/A_*                       @<sm-github>
+00_项目导航/06_团队输入输出总表/B_*                       @<po-github>
+00_项目导航/06_团队输入输出总表/C_*                       @<tl-github>
+00_项目导航/06_团队输入输出总表/D_*                       @<midbe-github> @<midfe-github>
+00_项目导航/06_团队输入输出总表/E_*                       @<fs-github>
+00_项目导航/06_团队输入输出总表/F_*                       @<sm-github>
+00_项目导航/06_团队输入输出总表/00_索引.md                @<sm-github>
+00_项目导航/SM_作战手册_*.md                              @<sm-github>
+00_项目导航/08_团队开发协作SOP.md                         @<sm-github> @<fs-github>
+00_项目导航/09_SM教练查询与回复模板.md                    @<sm-github>
+
+# ===== 01_产品发现 / 02_产品待办 =====
+01_产品发现/                                              @<po-github>
+02_产品待办/                                              @<po-github>
+02_产品待办/03_AC_验收标准/                               @<po-github> @<midbe-github> @<midfe-github>
+
+# ===== 03_迭代运行 =====
+03_迭代运行/                                              @<sm-github>
+03_迭代运行/**/01_Sprint流程监控台.md                     @<sm-github>
+
+# ===== 04_工程设计 =====
+04_工程设计/                                              @<tl-github>
+04_工程设计/01_ADR/                                       @<tl-github>
+04_工程设计/02_API契约/                                   @<tl-github> @<midbe-github>
+04_工程设计/03_数据模型/                                  @<tl-github> @<midbe-github>
+04_工程设计/04_前端设计系统/                              @<srfe-github>
+
+# ===== 05_质量验证 =====
+05_质量验证/                                              @<midbe-github> @<midfe-github>
+05_质量验证/00_质量策略.md                                @<tl-github> @<midbe-github> @<midfe-github>
+
+# ===== 06_发布运维 =====
+06_发布运维/                                              @<fs-github>
+
+# ===== 07_度量改进 =====
+07_度量改进/                                              @<sm-github>
+
+# ===== 10_代码仓库 =====
+10_代码仓库/                                              @<fs-github>
+
+# ===== 90_会议与决策 =====
+90_会议与决策/                                            @<sm-github>
+
+# ===== 知识库 =====
+知识库/                                                   @<sm-github>
+知识库/Scrum/                                             @<sm-github>
+知识库/Scrum/13_文档协作与并发控制规范.md                 @<sm-github>
+知识库/项目模板/                                          @<sm-github>
+知识库/运维与环境/                                        @<fs-github>
