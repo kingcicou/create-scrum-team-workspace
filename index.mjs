@@ -189,6 +189,59 @@ const PROJECT_TYPES = {
   prototype: "原型转正",
 };
 
+const SPRINT0_ROLE_ACTION_DEFAULTS = {
+  po: {
+    must: "B01 产品愿景；B03 首批 Backlog",
+    wait: "A02 团队协议确认",
+    ahead: "B02 用户场景、价值假设",
+    support: "为 Story 澄清价值与 AC",
+    stop: "未取舍前不承诺范围",
+  },
+  sm: {
+    must: "A02/A04/A05；校准本监控台",
+    wait: "各事实源责任人更新",
+    ahead: "准备事件日历和门禁检查",
+    support: "暴露依赖、协调清障",
+    stop: "不替 PO/TL 派活或决策",
+  },
+  tl: {
+    must: "C01 技术全景；C02 ADR 候选",
+    wait: "B01 愿景、B03 候选 Story",
+    ahead: "现状诊断、风险 Spike",
+    support: "指导 BE/FE 契约拆分",
+    stop: "关键契约未评审不固化实现",
+  },
+  midbe: {
+    must: "协作 C03 API、C04 数据模型",
+    wait: "B03 Story、C01 技术全景",
+    ahead: "接口 Spike、测试骨架",
+    support: "补边界场景和集成测试设计",
+    stop: "AC/契约未明不进入完整实现",
+  },
+  srfe: {
+    must: "体验基线、前端架构和 C03 评审",
+    wait: "B01/B02 场景、B03 Story",
+    ahead: "设计令牌、组件约定、可访问性清单",
+    support: "指导 Mid.FE 拆分页面状态",
+    stop: "交互和契约未定不固化关键流程",
+  },
+  midfe: {
+    must: "协作页面拆分和前端测试设计",
+    wait: "B03 Story、C03 API、体验基线",
+    ahead: "Mock、组件骨架、异常态/E2E 用例",
+    support: "参加 API/UX 评审",
+    stop: "不自行假设未评审字段",
+  },
+  fs: {
+    mustReady: "验证 E01/E02、角色身份和仓库权限",
+    mustManual: "创建 E01/E02、角色工作区和身份",
+    wait: "C01 架构、D01 质量门禁",
+    ahead: "CI 骨架、环境检查和回滚清单",
+    support: "协助 TL 集成和团队 Git 上手",
+    stop: "发布门禁未齐不开放部署",
+  },
+};
+
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 const templateDir = path.join(rootDir, "template");
 
@@ -598,10 +651,22 @@ function buildReplacements(options, roles) {
     CREATED_DATE: today,
     SPRINT_NUMBER: String(options.sprintNumber),
     DEFAULT_BRANCH: options.defaultBranch,
+    TEAMWORK_STATUS: options.setupWorktrees ? "✅" : "🔵",
+    TEAMWORK_OUTPUT_TIME: options.setupWorktrees ? today : "-",
+    TEAMWORK_CHANGE: options.setupWorktrees ? "生成器创建角色 worktree" : "待手工创建角色 worktree",
+    TEAMWORK_NOTE: options.setupWorktrees
+      ? "验证身份和远端权限"
+      : "参考 08_团队开发协作SOP.md §4.1 手工创建",
+    TEAMWORK_FLOW_STAGE: options.setupWorktrees ? "工作区就绪" : "工作区准备",
+    TEAMWORK_FLOW_STATE: options.setupWorktrees ? "🟢" : "🔵",
+    TEAMWORK_FLOW_GAP: options.setupWorktrees
+      ? "验证身份和远端权限"
+      : "创建 Git 仓库和角色 worktree",
     ROLE_TABLE: renderRoleTable(roles),
     ROLE_CARDS: renderRoleCards(roles),
     ABILITY_MATRIX: renderAbilityMatrix(roles),
     BACKUP_TABLE: renderBackupTable(roles),
+    ROLE_ACTION_BOARD: renderRoleActionBoard(roles, today, options),
     WORKTREE_DIRS: worktreeRoles.map((role) => `  ${role.dirName}/`).join("\n"),
     WORKTREE_COMMANDS: worktreeRoles
       .map((role) => `git worktree add TeamWork/${role.dirName} -b ${role.branchName} sprint-${options.sprintNumber}`)
@@ -706,6 +771,20 @@ function renderBackupTable(roles) {
     "| 帽子 | 主担 | 备份/兜底 |",
     "| --- | --- | --- |",
     ...roles.map((role) => `| ${role.hats} | ${role.name} | ${role.backup} |`),
+  ].join("\n");
+}
+
+function renderRoleActionBoard(roles, today, options) {
+  return [
+    "| 角色 | 当前 WIP（成员站会前自填） | 必做 | 等待输入 | 可提前先行 | 协作清障 | 暂停/升级 | 依据 | 最后更新 |",
+    "| --- | :---: | --- | --- | --- | --- | --- | --- | --- |",
+    ...roles.map((role) => {
+      const action = SPRINT0_ROLE_ACTION_DEFAULTS[role.id];
+      const must = role.id === "fs"
+        ? (options.setupWorktrees ? action.mustReady : action.mustManual)
+        : action.must;
+      return `| ${role.name}（${role.shortTitle}） | 0 | ${must} | ${action.wait} | ${action.ahead} | ${action.support} | ${action.stop} | 总表/Story/风险/PR | ${today} |`;
+    }),
   ].join("\n");
 }
 
@@ -997,6 +1076,7 @@ async function main() {
   console.log("1. 打开 00_项目导航/00_项目首页.md");
   console.log("2. 检查 00_项目导航/02_角色与联系方式.md");
   console.log("3. 根据项目类型完善 03_迭代运行/Sprint-0-启动/00_Sprint计划.md");
+  console.log("4. 校准 03_迭代运行/Sprint-0-启动/01_Sprint流程监控台.md");
 }
 
 main().catch((error) => {

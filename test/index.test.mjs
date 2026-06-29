@@ -47,6 +47,20 @@ test("creates isolated coding-role worktrees and identities", () => {
     assert.equal(generatedConfig.gitRoot, "repo");
     assert.equal(generatedConfig.sprintNumber, 4);
     assert.equal(generatedConfig.pushRemote, false);
+    assert.ok(
+      fs
+        .readFileSync(
+          path.join(
+            target,
+            "03_迭代运行",
+            "Sprint-0-启动",
+            "01_Sprint流程监控台.md",
+          ),
+          "utf8",
+        )
+        .includes("| 代码协同流 | 工作区就绪 |"),
+      "default repo mode should mark code collaboration workspace ready",
+    );
 
     const roles = generatedConfig.roleDetails.filter((role) => role.worktree);
     assert.equal(roles.length, 5);
@@ -222,6 +236,61 @@ test("generates 知识库/运维与环境/README.md with substituted placeholder
       !/__REPO_NAME__|\{\{REPO_NAME\}\}|\{\{PROJECT_NAME\}\}/.test(content),
       "no raw placeholders should remain",
     );
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("generates Sprint flow monitor with named role actions and no stale progress file", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-flow-"));
+  const target = path.join(sandbox, "project");
+
+  try {
+    runCli([target, "--preset=studio", "--repo=flow-app", "--no-git"]);
+
+    const sprintDir = path.join(target, "03_迭代运行", "Sprint-0-启动");
+    const monitor = path.join(sprintDir, "01_Sprint流程监控台.md");
+    const oldProgress = path.join(sprintDir, "01_工作进度表.md");
+    const coachGuide = path.join(
+      target,
+      "知识库",
+      "Scrum",
+      "12_SM流程监控与角色行动决策规范.md",
+    );
+
+    assert.ok(fs.existsSync(monitor), "Sprint flow monitor should exist");
+    assert.equal(fs.existsSync(oldProgress), false, "old progress table should not be generated");
+    assert.ok(fs.existsSync(coachGuide), "SM coaching decision guide should exist");
+
+    const content = fs.readFileSync(monitor, "utf8");
+    assert.ok(content.includes("Muse（PO）"), "role action board should use preset names");
+    assert.ok(content.includes("Bridge（FS/DevOps）"), "coding role should be rendered");
+    assert.ok(content.includes("B01 产品愿景"), "Sprint 0 role actions should be prefilled");
+    assert.ok(content.includes("创建 E01/E02"), "FS action should follow --no-git mode");
+    assert.ok(content.includes("当前 WIP（成员站会前自填）"));
+    assert.ok(content.includes("| CI 红灯 | 超过 2 小时 | ⚪ |"));
+    assert.ok(content.includes("铁律：Sprint 结束后归档本监控台"));
+    assert.ok(content.includes("等待输入"), "action classification should be present");
+    assert.ok(
+      content.includes("创建 Git 仓库和角色 worktree"),
+      "--no-git should keep code collaboration flow pending",
+    );
+    assert.equal(
+      /\{\{ROLE_ACTION_BOARD\}\}|\{\{CREATED_DATE\}\}|\{\{TEAMWORK_[A-Z_]+\}\}/.test(content),
+      false,
+    );
+
+    const outputLedger = fs.readFileSync(
+      path.join(target, "00_项目导航", "06_团队输入输出总表.md"),
+      "utf8",
+    );
+    assert.ok(
+      outputLedger.includes("待手工创建角色 worktree"),
+      "--no-git should render the manual TeamWork path",
+    );
+    assert.ok(outputLedger.includes("参考 08_团队开发协作SOP.md §4.1 手工创建"));
+    assert.ok(outputLedger.includes("| A07 | P0 | Sprint 0 流程监控台 |"));
+    assert.equal(/\{\{TEAMWORK_[A-Z_]+\}\}/.test(outputLedger), false);
   } finally {
     fs.rmSync(sandbox, { recursive: true, force: true });
   }

@@ -15,6 +15,7 @@
 | 调整角色命名玩法 | `00_项目导航/07_角色命名玩法指南.md` |
 | 看 SM 作战手册 | `00_项目导航/SM_作战手册_Sutherland.md` |
 | 看 Sprint 0 计划 | `03_迭代运行/Sprint-0-启动/00_Sprint计划.md` |
+| 看当前阶段与角色行动 | `03_迭代运行/Sprint-0-启动/01_Sprint流程监控台.md` |
 | 写首批 Backlog | `02_产品待办/02_Stories/Sprint1_候选Backlog.md` |
 | 做工程设计 | `04_工程设计/00_技术全景.md` |
 | 进入代码仓库 | `10_代码仓库/{{REPO_NAME}}/README.md` |
