@@ -201,3 +201,24 @@ test("--push refuses placeholder @example.com emails", () => {
     fs.rmSync(sandbox, { recursive: true, force: true });
   }
 });
+
+test("generates 知识库/运维与环境/README.md with substituted placeholders", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-ops-"));
+  const target = path.join(sandbox, "project");
+
+  try {
+    runCli([target, "--repo=ops-app", "--no-git", "--no-worktrees"]);
+
+    const readme = path.join(target, "知识库", "运维与环境", "README.md");
+    assert.ok(fs.existsSync(readme), "ops knowledge README should exist");
+
+    const content = fs.readFileSync(readme, "utf8");
+    assert.ok(content.includes("ops-app"), "REPO_NAME placeholder should be substituted");
+    assert.ok(
+      !/__REPO_NAME__|\{\{REPO_NAME\}\}|\{\{PROJECT_NAME\}\}/.test(content),
+      "no raw placeholders should remain",
+    );
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});
