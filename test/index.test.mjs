@@ -257,10 +257,16 @@ test("generates Sprint flow monitor with named role actions and no stale progres
       "Scrum",
       "12_SM流程监控与角色行动决策规范.md",
     );
+    const responseTemplate = path.join(
+      target,
+      "00_项目导航",
+      "09_SM教练查询与回复模板.md",
+    );
 
     assert.ok(fs.existsSync(monitor), "Sprint flow monitor should exist");
     assert.equal(fs.existsSync(oldProgress), false, "old progress table should not be generated");
     assert.ok(fs.existsSync(coachGuide), "SM coaching decision guide should exist");
+    assert.ok(fs.existsSync(responseTemplate), "SM standard response template should exist");
 
     const content = fs.readFileSync(monitor, "utf8");
     assert.ok(content.includes("Muse（PO）"), "role action board should use preset names");
@@ -270,6 +276,9 @@ test("generates Sprint flow monitor with named role actions and no stale progres
     assert.ok(content.includes("当前 WIP（成员站会前自填）"));
     assert.ok(content.includes("| CI 红灯 | 超过 2 小时 | ⚪ |"));
     assert.ok(content.includes("铁律：Sprint 结束后归档本监控台"));
+    assert.ok(content.includes("## 3. 依赖时间线与并行泳道"));
+    assert.ok(content.includes("G1 Sprint 1 工程准入"));
+    assert.ok(content.includes("flowchart LR"));
     assert.ok(content.includes("等待输入"), "action classification should be present");
     assert.ok(
       content.includes("创建 Git 仓库和角色 worktree"),
@@ -290,7 +299,14 @@ test("generates Sprint flow monitor with named role actions and no stale progres
     );
     assert.ok(outputLedger.includes("参考 08_团队开发协作SOP.md §4.1 手工创建"));
     assert.ok(outputLedger.includes("| A07 | P0 | Sprint 0 流程监控台 |"));
+    assert.ok(outputLedger.includes("| A08 | P1 | SM 教练查询与回复模板 |"));
     assert.equal(/\{\{TEAMWORK_[A-Z_]+\}\}/.test(outputLedger), false);
+
+    const responseContent = fs.readFileSync(responseTemplate, "utf8");
+    assert.ok(responseContent.includes("## 2. 关键因果链"));
+    assert.ok(responseContent.includes("## 3. 当前并行泳道"));
+    assert.ok(responseContent.includes("## 4. 下一汇合门"));
+    assert.ok(responseContent.includes("完成后会解锁"));
   } finally {
     fs.rmSync(sandbox, { recursive: true, force: true });
   }
