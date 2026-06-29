@@ -4,6 +4,23 @@
 
 版本号使用语义化版本（SemVer）：`MAJOR.MINOR.PATCH`。
 
+## [0.3.2] - 2026-06-29
+
+### Added
+
+- 新增 GitHub Actions 测试矩阵：Node.js 18/20/22 × Ubuntu/Windows/macOS。
+- 自动化测试补齐 `--no-worktrees`、无 Git `--dry-run` 和本地 bare 远端推送契约。
+
+### Changed
+
+- `npm test` 显式运行 `test/index.test.mjs`，兼容 Node.js 18+ 和三大操作系统。
+- 精简 Git 仓库模式 FAQ，并指向角色工作区自动化迭代计划。
+
+### 设计动机
+
+- **测试命令显式指向文件**：`node --test test` 在 Node 22/Windows 会把目录当作模块并失败，因此使用 Node 18+ 均支持的 `node --test test/index.test.mjs`。
+- **测试不进入发布包**：`package.json.files` 继续不包含 `test/`；CI 使用仓库源码执行测试，npm 消费者只获得运行所需文件。
+
 ## [0.3.1] - 2026-06-29
 
 ### Added

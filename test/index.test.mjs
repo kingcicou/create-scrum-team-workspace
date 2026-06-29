@@ -79,9 +79,15 @@ test("creates isolated coding-role worktrees and identities", () => {
 test("--dry-run does not write files or initialize git", () => {
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-dry-"));
   const target = path.join(sandbox, "project");
+  const envWithoutPath = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => key.toLowerCase() !== "path"),
+  );
 
   try {
-    const output = runCli([target, "--dry-run", "--repo=dry-app"]);
+    const output = runCli(
+      [target, "--dry-run", "--repo=dry-app"],
+      { env: { ...envWithoutPath, PATH: "" } },
+    );
 
     assert.ok(output.includes("[dry-run]"), "should print dry-run banner");
     assert.ok(output.includes("dry-app"), "should mention substituted repo name in preview");
@@ -109,13 +115,11 @@ test("--no-worktrees skips role worktree creation but keeps repo init", () => {
       "no feature branches without worktrees",
     );
 
-    const teamWork = path.join(repo, "TeamWork");
-    if (fs.existsSync(teamWork)) {
-      const entries = fs
-        .readdirSync(teamWork, { withFileTypes: true })
-        .filter((d) => d.isDirectory());
-      assert.equal(entries.length, 0, "TeamWork must contain no role subdirs");
-    }
+    assert.equal(
+      fs.existsSync(path.join(repo, "TeamWork")),
+      false,
+      "TeamWork should not be created",
+    );
 
     const config = JSON.parse(
       fs.readFileSync(path.join(target, "00_项目导航", "roles.config.json"), "utf8"),
