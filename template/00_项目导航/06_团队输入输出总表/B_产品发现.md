@@ -17,7 +17,11 @@ last-updated: {{CREATED_DATE}}
 | --- | :---: | --- | --- | --- | :---: | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | B01 | P0 | 产品愿景与目标 | `01_产品发现/00_产品愿景与目标.md` | PO | 🔵 | - | A02 | 全员 | SM | - | 待补 | Sprint 0 输入 | V0.1 | 待评审 | PO, TL |
 | B02 | P0 | 用户画像与场景 | `01_产品发现/01_用户画像与场景.md` | PO | 🔵 | - | B01 | UX, TL, QA | 全员 | - | 待补 | - | V0.1 | 待评审 | PO, UX |
-| B03 | P0 | 首批 Product Backlog | `02_产品待办/02_Stories/Sprint1_候选Backlog.md` | PO | 🔵 | - | B01, B02 | 全员 | TL, QA | - | 待 Refinement | 进入 Sprint 前必须 DoR | V0.1 | 待评审 | PO, TL |
+| B03 | P0 | 首批 Product Backlog | `02_产品待办/02_Stories/Sprint1_候选Backlog.md` | PO | 🔵 | - | B01, B02, B04 | 全员 | TL, QA | - | 待 Refinement | 进入 Sprint 前必须 DoR | V0.1 | 待评审 | PO, TL |
+| B04 | P0 | 价值假设 | `01_产品发现/02_价值假设.md` | PO | 🔵 | - | B01, B02 | TL, QA, SM | 全员 | - | 待补 | v0.4.2 新增；与 Epic / Sprint Review 联动 | V0.1 | 待评审 | PO, TL |
+| B05 | P1 | 竞品与市场 | `01_产品发现/03_竞品与市场.md` | PO | 🔵 | - | B01 | TL, SM | 全员 | - | 待补 | v0.4.2 新增；原始访谈进 Sprint 评估产物 | V0.1 | 待评审 | PO |
+| B06 | P1 | 路线图与北极星指标 | `01_产品发现/04_路线图与北极星指标.md` | PO | 🔵 | - | B04 | FS, TL, SM | 全员 | - | 待补 | v0.4.2 新增；单一/双指标避免失焦 | V0.1 | 待评审 | PO, TL, FS |
+| B07 | P0 | 机会评估与取舍记录 | `01_产品发现/05_机会评估与取舍记录.md` | PO | 🔵 | - | B03, B05 | 全员 | - | - | 待补 | Refinement 决策日志 | V0.1 | 待评审 | PO, TL |
 
 ## 评审意见追加
 
