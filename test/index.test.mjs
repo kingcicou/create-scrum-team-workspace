@@ -342,7 +342,7 @@ test("v0.4.0 splits 06 ledger into per-role tables and emits CODEOWNERS", () => 
       "A_项目管理.md": /owner:\s*SM/,
       "B_产品发现.md": /owner:\s*PO/,
       "C_工程设计.md": /owner:\s*TL/,
-      "D_质量验证.md": /owner:\s*\[Mid\.BE,\s*Mid\.FE\]/,
+      "D_质量验证.md": /owner:\s*Mid\.BE\b/,
       "E_发布运维.md": /owner:\s*FS/,
       "F_度量改进.md": /owner:\s*SM/,
     };
@@ -350,6 +350,25 @@ test("v0.4.0 splits 06 ledger into per-role tables and emits CODEOWNERS", () => 
       const content = fs.readFileSync(path.join(ledgerDir, file), "utf8");
       assert.match(content, regex, `${file} owner mismatch`);
     }
+
+    // v0.4.1: D file must use segmented-owner pattern, NOT owner array
+    const dContent = fs.readFileSync(path.join(ledgerDir, "D_质量验证.md"), "utf8");
+    assert.equal(
+      /owner:\s*\[/m.test(dContent),
+      false,
+      "D file must not use array owner (v0.4.1 ban on dual primary owner)",
+    );
+    assert.match(dContent, /coOwners:\s*\[Mid\.FE\]/, "D should declare Mid.FE as coOwner");
+    assert.match(
+      dContent,
+      /§1[^\n]*\(owner:\s*Mid\.BE/,
+      "D §1 should be owned by Mid.BE",
+    );
+    assert.match(
+      dContent,
+      /§2[^\n]*\(owner:\s*Mid\.FE/,
+      "D §2 should be owned by Mid.FE",
+    );
 
     // CODEOWNERS generated with real role names substituted in comments
     const codeowners = path.join(target, ".github", "CODEOWNERS");

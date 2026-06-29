@@ -4,6 +4,30 @@
 
 版本号使用语义化版本（SemVer）：`MAJOR.MINOR.PATCH`。
 
+## [0.4.1] - 2026-06-29
+
+### Fixed
+
+- **修复 v0.4.0 的设计漏洞：双 primary owner 不解决冲突**。
+  - 原 `D_质量验证.md` 写为 `owner: [Mid.BE, Mid.FE]`，违反 13 规范 §5"唯一 owner"原则——两人都能改 = 公地悲剧。
+  - 改为**分段 owner**：`owner: Mid.BE`（primary，整体一致性兜底）+ `coOwners: [Mid.FE]`（继任权）+ 段级 owner（§1 由 Mid.BE 改，§2 由 Mid.FE 改）+ 表格新增 `row-owner` 列。
+
+### Changed
+
+- `知识库/Scrum/13_文档协作与并发控制规范.md` §5 加 §5.1 铁律"owner 字段唯一"；新增 `coOwners` 字段语义。
+- `13_*.md` §10 三类协作模式补充 frontmatter 写法标准；分段 owner 示例升级为 v0.4.1 形态（含 primary + coOwners + 段级 + row-owner）。
+- `13_*.md` §12 反模式表追加"`owner: [A, B]` 数组写法"。
+- `06_团队输入输出总表/00_索引.md` D 行描述更新为"Mid.BE (primary) + Mid.FE (coOwner, 段级)"。
+- `_github/CODEOWNERS` D 行附加注释说明 GitHub 不支持行级，合并由 primary owner 主导。
+- 测试 case `v0.4.0 splits 06 ledger ...` 强化：禁止 `owner: [...]` 数组形式；断言 D 文件含 `coOwners` 与段级 owner 标注。
+
+### 设计动机
+
+- **为什么 0.4.0 留下了这个洞**：当时把"质量需要 QA 视角整体一致"和"两个角色各管一摊"混淆为"双 primary owner"。其实 13 规范 §10 已经定义了分段 owner 模式，但 D 实例没用，反而写了含糊的数组。
+- **为什么不直接拆 D 为两文件**：D 只 2 行，文件膨胀代价 > 收益；质量策略与测试用例需要 QA 视角一致性；段级 owner 已经够。
+- **`coOwners` 与 `reviewers` 的区别**：reviewers 是评审人（写评审段），coOwners 是次要权威（仅在 owner 不可达时由 SM 仲裁后代行）。两者职责不交叉。
+- **教训**：规范本身不能保证实例自洽。本轮发现 → 修复 → 测试守护，形成"规范 → 实例 → 测试"三位一体的回归保护。
+
 ## [0.4.0] - 2026-06-29
 
 ### Added

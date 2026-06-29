@@ -97,6 +97,7 @@ node index.mjs <project-name> \
 
 | 版本 | 决策 | 起因 | 选项与取舍 | 结论 |
 | --- | --- | --- | --- | --- |
+| 0.4.1 | 禁止 `owner: [A, B]` 数组写法；引入 `coOwners` 字段与段级 owner | 0.4.0 D 文件写 `owner: [Mid.BE, Mid.FE]`，两人都能改 = 公地悲剧；与 §5"唯一 owner"自相矛盾 | A. 拆为两文件；B. 单 primary owner + coOwners + 段级 owner | 选 B；D 内容少且强相关，段级 owner 已经够；规范层加铁律 + 测试守护 |
 | 0.4.0 | 文档协作多层防御 | 实战发现 3 类高频冲突（总表竞争、设计稀释、评审拥挤）+ 9 类隐藏问题；用户提议 "SM 统一合并" 但 SM 会成瓶颈 | A. SM 合并；B. 迁出 Markdown 用 SaaS 工具；C. Frontmatter + 评审段 + PR + CODEOWNERS 多层防御 | 选 C，借鉴 ADR/RFC/CODEOWNERS 成熟工程实践，无新依赖；详见 `知识库/Scrum/13_文档协作与并发控制规范.md` |
 | 0.4.0 | 06 总表拆为目录 + 6 角色分表 + 索引 | 多人同时改一个文件是冲突最高频源 | A. 行级 owner 单文件；B. 拆到角色粒度；C. 拆到 Story 粒度 | 选 B，物理消除冲突且保留原 ID；F 度量改进用评审段追加协议补足"多人参与"场景 |
 | 0.4.0 | Frontmatter 五字段（owner/reviewers/status/version/last-updated）| 责任不明、版本漂移、状态无元数据 | A. 不加；B. 仅 owner；C. 五字段标准 | 选 C，CI 可校验、status 触发三段流转、CRLF/LF/BOM 容错 |

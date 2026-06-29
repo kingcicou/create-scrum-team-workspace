@@ -28,6 +28,8 @@
 00_项目导航/06_团队输入输出总表/B_*                       @<po-github>
 00_项目导航/06_团队输入输出总表/C_*                       @<tl-github>
 00_项目导航/06_团队输入输出总表/D_*                       @<midbe-github> @<midfe-github>
+# D_质量验证 采用分段 owner（Mid.BE primary + Mid.FE coOwner）；GitHub CODEOWNERS 不支持行级，
+# 两人同时收到 review 请求，但合并仍由 primary owner 主导或经 SM 协调。
 00_项目导航/06_团队输入输出总表/E_*                       @<fs-github>
 00_项目导航/06_团队输入输出总表/F_*                       @<sm-github>
 00_项目导航/06_团队输入输出总表/00_索引.md                @<sm-github>
