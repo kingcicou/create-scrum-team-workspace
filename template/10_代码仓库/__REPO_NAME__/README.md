@@ -1,6 +1,7 @@
 # {{REPO_NAME}}
 
-这是 `{{PROJECT_NAME}}` 的主代码仓库骨架。它参考轻量全栈 monorepo 的目录思路，但服务于 Scrum 团队协同开发。
+这是 `{{PROJECT_NAME}}` 在 `{{REPO_STRATEGY}}` 策略下的目标代码仓库骨架。
+`rewrite` 时它是候选替代仓，在切换门禁通过前不得宣称为生产主仓。
 
 ## 目录
 

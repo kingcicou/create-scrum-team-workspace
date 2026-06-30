@@ -45,6 +45,7 @@ test("creates isolated coding-role worktrees and identities", () => {
       fs.readFileSync(path.join(target, "00_项目导航", "roles.config.json"), "utf8"),
     );
     assert.equal(generatedConfig.gitRoot, "repo");
+    assert.equal(generatedConfig.repoStrategy, "create");
     assert.equal(generatedConfig.sprintNumber, 4);
     assert.equal(generatedConfig.pushRemote, false);
     assert.ok(
@@ -144,6 +145,124 @@ test("--no-worktrees skips role worktree creation but keeps repo init", () => {
   }
 });
 
+test("product reuse records the existing repo without creating a code copy", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-reuse-"));
+  const target = path.join(sandbox, "project");
+  const sourceRepo = "https://example.com/acme/qfd.git";
+
+  try {
+    runCli([
+      target,
+      "--type=product",
+      `--source-repo=${sourceRepo}`,
+      "--repo=qfd",
+    ]);
+
+    assert.equal(
+      fs.existsSync(path.join(target, "10_代码仓库", "qfd")),
+      false,
+      "reuse must not create a second code tree",
+    );
+    assert.equal(
+      fs.existsSync(path.join(target, "10_代码仓库", "qfd", ".git")),
+      false,
+      "reuse must not initialize a new Git history",
+    );
+
+    const config = JSON.parse(
+      fs.readFileSync(path.join(target, "00_项目导航", "roles.config.json"), "utf8"),
+    );
+    assert.equal(config.type, "product");
+    assert.equal(config.repoStrategy, "reuse");
+    assert.equal(config.sourceRepo, sourceRepo);
+    assert.equal(config.gitRoot, "none");
+    assert.equal(config.setupWorktrees, false);
+
+    const workspaceFile = fs
+      .readdirSync(target)
+      .find((name) => name.endsWith(".code-workspace"));
+    const workspace = JSON.parse(fs.readFileSync(path.join(target, workspaceFile), "utf8"));
+    assert.equal(
+      workspace.folders.some((folder) => folder.name === "Code Repo"),
+      false,
+      "reuse workspace must not point at a non-existent generated code folder",
+    );
+
+    const inventory = fs.readFileSync(
+      path.join(target, "10_代码仓库", "00_仓库清单.md"),
+      "utf8",
+    );
+    assert.ok(inventory.includes("| R01 | qfd | 当前主仓 |"));
+    assert.ok(inventory.includes(sourceRepo));
+    assert.ok(inventory.includes("复用现有技术栈"));
+
+    const sprintPlan = fs.readFileSync(
+      path.join(target, "03_迭代运行", "Sprint-0-启动", "00_Sprint计划.md"),
+      "utf8",
+    );
+    assert.ok(sprintPlan.includes("`reuse`：复用现有代码仓库"));
+    assert.ok(sprintPlan.includes("每个 Sprint Planning 重新确认"));
+
+    const monitor = fs.readFileSync(
+      path.join(target, "03_迭代运行", "Sprint-0-启动", "01_Sprint流程监控台.md"),
+      "utf8",
+    );
+    assert.ok(monitor.includes("确认 E01 现仓清单、权限、基线分支和角色工作区"));
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("rewrite keeps the source repo visible and creates a candidate target repo", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-rewrite-"));
+  const target = path.join(sandbox, "project");
+  const sourceRepo = "https://example.com/acme/legacy.git";
+
+  try {
+    runCli([
+      target,
+      "--type=product",
+      "--repo-strategy=rewrite",
+      `--source-repo=${sourceRepo}`,
+      "--repo=rust-svelte-next",
+      "--sprint=4",
+      "--no-git",
+    ]);
+
+    assert.ok(
+      fs.existsSync(
+        path.join(target, "10_代码仓库", "rust-svelte-next", "apps", "backend", "README.md"),
+      ),
+      "rewrite should create the candidate target skeleton",
+    );
+
+    const inventory = fs.readFileSync(
+      path.join(target, "10_代码仓库", "00_仓库清单.md"),
+      "utf8",
+    );
+    assert.ok(inventory.includes("| R01 | 现有系统 | 现行主仓 |"));
+    assert.ok(inventory.includes("| R02 | rust-svelte-next | 候选替代仓 |"));
+    assert.ok(inventory.includes("旧仓仍是生产事实源"));
+
+    const technicalOverview = fs.readFileSync(
+      path.join(target, "04_工程设计", "00_技术全景.md"),
+      "utf8",
+    );
+    assert.ok(technicalOverview.includes("## 当前/现行技术栈"));
+    assert.ok(technicalOverview.includes("## 目标技术栈"));
+    assert.ok(technicalOverview.includes("新技术栈并行重写后切换"));
+
+    const config = JSON.parse(
+      fs.readFileSync(path.join(target, "00_项目导航", "roles.config.json"), "utf8"),
+    );
+    assert.equal(config.type, "product", "project background should remain product");
+    assert.equal(config.repoStrategy, "rewrite");
+    assert.equal(config.sprintNumber, 4);
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
 test("--remote + --push pushes all branches to a local bare remote", () => {
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-push-"));
   const target = path.join(sandbox, "project");
@@ -220,7 +339,7 @@ test("--push refuses placeholder @example.com emails", () => {
   }
 });
 
-test("generates 知识库/运维与环境/README.md with substituted placeholders", () => {
+test("generates operations guidance using the repository inventory", () => {
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-ops-"));
   const target = path.join(sandbox, "project");
 
@@ -231,7 +350,10 @@ test("generates 知识库/运维与环境/README.md with substituted placeholder
     assert.ok(fs.existsSync(readme), "ops knowledge README should exist");
 
     const content = fs.readFileSync(readme, "utf8");
-    assert.ok(content.includes("ops-app"), "REPO_NAME placeholder should be substituted");
+    assert.ok(
+      content.includes("10_代码仓库/00_仓库清单.md"),
+      "operations guidance should resolve the active repo through the inventory",
+    );
     assert.ok(
       !/__REPO_NAME__|\{\{REPO_NAME\}\}|\{\{PROJECT_NAME\}\}/.test(content),
       "no raw placeholders should remain",

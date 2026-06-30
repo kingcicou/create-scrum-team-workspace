@@ -61,11 +61,12 @@ node index.mjs my-project --type=new --preset=tech
 
 - 零依赖 Node.js CLI。
 - 支持从零新项目、存量项目重构、成熟产品迭代、原型转正四类项目。
+- 项目背景与 Sprint 仓库策略解耦，支持复用现仓、代码导入、新栈重写和从零建仓。
 - 内置多套角色命名预设：世界技术大神、中国神话、武侠风格、航海罗盘、独立工作室、希腊神话。
 - 支持单个角色改名，例如 `--role.midfe=Aurora`。
 - 交互式先列出全部角色，可按槽位调整名称与邮箱，最终统一确认。
 - 自动生成角色表、角色 Soul 卡、能力矩阵、备份机制、Sprint 0 分工。
-- 默认初始化独立代码仓，并统一创建 TL、Mid.BE、Sr.FE、Mid.FE、FS 五个 worktree。
+- `create/import/rewrite` 默认初始化目标代码仓，并统一创建五个编码角色 worktree；`reuse` 不复制现仓。
 - 使用 worktree 级 Git 配置隔离五个角色的提交身份。
 - 支持可选角色就绪测试提交、origin 配置和显式远端推送。
 - 自动生成产品、Backlog、Sprint、工程设计、质量、发布、度量、会议决策目录。
@@ -75,7 +76,7 @@ node index.mjs my-project --type=new --preset=tech
 - SM/教练可直接生成适合群聊转发的快报、Sprint 流程全景和单角色状态卡。
 - **多人协作并发控制（v0.4.0）**：`06_总表` 按角色拆分到目录、关键协作文档加 Frontmatter（owner / reviewers / status / version）、内置 `.github/CODEOWNERS` 与"评审专用段 + ACK"协议；详见 `知识库/Scrum/13_文档协作与并发控制规范.md`。
 - **Sprint关闭经验（v0.5.0）**：提炼QFD_Ark外部评审六条教训，分离时间盒、Goal、遗留处置和下一轮准入，并生成轻量关闭检查表；详见`知识库/Scrum/14_Sprint关闭与证据治理规范.md`。
-- 内置代码仓库骨架和 `TeamWork/` 协同工作区规范。
+- 按仓库策略生成代码骨架、仓库清单和 `TeamWork/` 协同工作区规范。
 - 代码仓库不维护重复 `01-docs` 文档中心；项目工作区文档是主事实源，代码仓库保留可执行资产和链接。
 
 ## 用法详解
@@ -88,6 +89,26 @@ node index.mjs my-project
 
 ```bash
 node index.mjs acme-ark --type=legacy --preset=greek
+```
+
+复用成熟产品的现有代码仓：
+
+```bash
+node index.mjs acme-ark \
+  --type=product \
+  --repo-strategy=reuse \
+  --source-repo=https://example.com/acme/ark.git
+```
+
+在后续 Sprint 以新技术栈建立候选替代仓：
+
+```bash
+node index.mjs acme-next \
+  --type=product \
+  --repo-strategy=rewrite \
+  --source-repo=https://example.com/acme/ark.git \
+  --repo=acme-next \
+  --sprint=4
 ```
 
 调整某个角色名称：
@@ -127,6 +148,8 @@ node index.mjs --config=./scrum.config.json
   "projectName": "acme-ark",
   "repoName": "acme-ark-app",
   "type": "new",
+  "repoStrategy": "create",
+  "sourceRepo": "",
   "preset": "tech",
   "gitRoot": "repo",
   "setupWorktrees": true,
@@ -186,6 +209,20 @@ node index.mjs --list-presets
 | `product` | 成熟产品迭代 |
 | `prototype` | 原型转正 |
 
+## Sprint 仓库策略
+
+| 参数 | 适用情形 | 生成行为 |
+| --- | --- | --- |
+| `--repo-strategy=reuse` | 现有仓可继续迭代 | 不复制代码、不初始化新仓，只登记来源 |
+| `--repo-strategy=import` | 散落/未规范代码需整合 | 生成目标仓，指导冻结、去敏和导入 |
+| `--repo-strategy=rewrite` | Rust/Svelte 等新栈并行替换 | 生成候选新仓，保留旧仓维护与回退 |
+| `--repo-strategy=create` | 完全从零开发 | 生成新主仓与协作工作区 |
+
+项目类型是背景，仓库策略是 Sprint 决策。生成后的
+`10_代码仓库/00_仓库清单.md` 是仓库角色和切换状态的事实源。
+未显式指定时采用建议值：`new -> create`、`legacy -> rewrite`、
+`product -> reuse`、`prototype -> import`；团队可按实际情况覆盖。
+
 ## 角色套装
 
 | preset | 风格 | 角色 |
@@ -214,7 +251,7 @@ node index.mjs --list-presets
 
 | 参数 | 含义 |
 | --- | --- |
-| 默认 / `--git-root=repo` | 初始化独立代码仓，并创建 5 个编码角色 worktree |
+| `--git-root=repo`（新建目标仓时默认） | 初始化独立目标代码仓，并创建 5 个编码角色 worktree |
 | `--git-root=workspace` | 把整个项目工作区初始化为一个 Git 仓库；不自动创建角色 worktree |
 | `--git-root=none` / `--no-git` | 不自动初始化 Git |
 
@@ -249,7 +286,7 @@ node index.mjs --list-presets
 ## 设计边界
 
 - `create-fullstack-monorepo` 只作为轻量工程骨架参考，不直接复用。
-- 本工具生成的是 Scrum 团队工作区：包含项目运行层、工程设计层、代码仓库骨架和角色协同规范。
+- 本工具生成的是 Scrum 团队工作区：包含项目运行层、工程设计层、仓库策略/按需代码骨架和角色协同规范。
 - 外层项目工作区是文档主事实源，代码仓库只放 `apps/`、`infra/`、CI/CD、测试脚本等可执行资产。
 - 个人分支使用 `feature/sprint-<n>/...`，避免与 `sprint-<n>` 集成分支产生 Git 引用冲突。
 - 角色就绪提交只留在各自分支，不自动合入 `main`。

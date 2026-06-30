@@ -8,8 +8,7 @@
     { "path": "04_工程设计", "name": "04 Engineering" },
     { "path": "05_质量验证", "name": "05 Quality" },
     { "path": "06_发布运维", "name": "06 Delivery" },
-    { "path": "07_度量改进", "name": "07 Metrics" },
-    { "path": "10_代码仓库/{{REPO_NAME}}", "name": "Code Repo" }
+    { "path": "07_度量改进", "name": "07 Metrics" }{{CODE_WORKSPACE_REPO_ENTRY}}
   ],
   "settings": {
     "editor.tabSize": 2,

@@ -189,6 +189,20 @@ const PROJECT_TYPES = {
   prototype: "原型转正",
 };
 
+const REPO_STRATEGIES = {
+  reuse: "复用现有代码仓库",
+  import: "整理已有代码并导入新仓库",
+  rewrite: "新技术栈并行重写后切换",
+  create: "从零创建代码仓库",
+};
+
+const DEFAULT_REPO_STRATEGY = {
+  new: "create",
+  legacy: "rewrite",
+  product: "reuse",
+  prototype: "import",
+};
+
 const SPRINT0_ROLE_ACTION_DEFAULTS = {
   po: {
     must: "B01 产品愿景；B03 首批 Backlog",
@@ -235,6 +249,7 @@ const SPRINT0_ROLE_ACTION_DEFAULTS = {
   fs: {
     mustReady: "验证 E01/E02、角色身份和仓库权限",
     mustManual: "创建 E01/E02、角色工作区和身份",
+    mustReuse: "确认 E01 现仓清单、权限、基线分支和角色工作区",
     wait: "C01 架构、D01 质量门禁",
     ahead: "CI 骨架、环境检查和回滚清单",
     support: "协助 TL 集成和团队 Git 上手",
@@ -250,6 +265,8 @@ function parseArgs(argv) {
     projectName: "",
     repoName: "",
     type: "new",
+    repoStrategy: "",
+    sourceRepo: "",
     preset: "tech",
     roleOverrides: {},
     emailOverrides: {},
@@ -329,6 +346,14 @@ function parseArgs(argv) {
       result.type = arg.slice("--type=".length);
       result._typeFromCli = true;
     }
+    else if (arg.startsWith("--repo-strategy=")) {
+      result.repoStrategy = arg.slice("--repo-strategy=".length);
+      result._repoStrategyFromCli = true;
+    }
+    else if (arg.startsWith("--source-repo=")) {
+      result.sourceRepo = arg.slice("--source-repo=".length);
+      result._sourceRepoFromCli = true;
+    }
     else if (arg.startsWith("--preset=")) {
       result.preset = arg.slice("--preset=".length);
       result._presetFromCli = true;
@@ -369,9 +394,19 @@ function loadConfigFile(options) {
   if (!options.projectName && raw.projectName) options.projectName = String(raw.projectName);
   if (!options.repoName && raw.repoName) options.repoName = String(raw.repoName);
   if (raw.type && !options._typeFromCli) options.type = String(raw.type);
+  if (raw.repoStrategy && !options._repoStrategyFromCli) {
+    options.repoStrategy = String(raw.repoStrategy);
+  }
+  if (raw.sourceRepo && !options._sourceRepoFromCli) options.sourceRepo = String(raw.sourceRepo);
   if (raw.preset && !options._presetFromCli) options.preset = String(raw.preset);
-  if (raw.gitRoot && !options._gitRootFromCli) options.gitRoot = String(raw.gitRoot);
-  if (typeof raw.setupWorktrees === "boolean" && !options._worktreesFromCli) options.setupWorktrees = raw.setupWorktrees;
+  if (raw.gitRoot && !options._gitRootFromCli) {
+    options.gitRoot = String(raw.gitRoot);
+    options._gitRootFromConfig = true;
+  }
+  if (typeof raw.setupWorktrees === "boolean" && !options._worktreesFromCli) {
+    options.setupWorktrees = raw.setupWorktrees;
+    options._worktreesFromConfig = true;
+  }
   if (typeof raw.roleTestCommits === "boolean" && !options._roleTestCommitsFromCli) {
     options.roleTestCommits = raw.roleTestCommits;
   }
@@ -430,18 +465,46 @@ async function completeOptions(options) {
       options.projectName = await ask(rl, "项目工作区名称", "my-scrum-project");
     }
     options.type = await askChoice(rl, "项目类型", PROJECT_TYPES, options.type);
+    if (!options.repoStrategy) {
+      options.repoStrategy = DEFAULT_REPO_STRATEGY[options.type] || "create";
+    }
+    options.repoStrategy = await askChoice(
+      rl,
+      "本 Sprint 代码仓库策略",
+      REPO_STRATEGIES,
+      options.repoStrategy,
+    );
+    if (["reuse", "import", "rewrite"].includes(options.repoStrategy)) {
+      options.sourceRepo = await ask(
+        rl,
+        "现有/来源代码仓库地址或路径（暂未确定可留空）",
+        options.sourceRepo,
+      );
+    }
     if (!options.repoName) {
       const defaultRepo = `${slug(options.projectName)}-app`;
-      options.repoName = await ask(rl, "代码仓库名（10_代码仓库/<repo>）", defaultRepo);
+      const repoPrompt = options.repoStrategy === "reuse"
+        ? "现有代码仓库名称（仅登记，不创建副本）"
+        : "目标代码仓库名（10_代码仓库/<repo>）";
+      options.repoName = await ask(rl, repoPrompt, defaultRepo);
+    }
+    if (options.repoStrategy === "reuse" && !options._gitRootFromCli) {
+      options.gitRoot = "none";
+      options.setupWorktrees = false;
     }
     options.gitRoot = await askChoice(
       rl,
       "Git 初始化模式",
-      {
-        repo: "代码仓库独立初始化（推荐，可自动创建角色 worktree）",
-        workspace: "整个项目工作区作为 Git 仓库",
-        none: "不自动初始化",
-      },
+      options.repoStrategy === "reuse"
+        ? {
+            none: "不初始化代码仓（推荐，复用现有仓库）",
+            workspace: "仅将项目工作区初始化为文档仓",
+          }
+        : {
+            repo: "目标代码仓独立初始化（推荐，可自动创建角色 worktree）",
+            workspace: "整个项目工作区作为 Git 仓库",
+            none: "不自动初始化",
+          },
       options.gitRoot,
     );
     options.preset = await askChoice(
@@ -501,6 +564,8 @@ async function completeOptions(options) {
     console.log("\n=== 即将创建的工作区 ===");
     console.log(`项目名称：${options.projectName}`);
     console.log(`项目类型：${PROJECT_TYPES[options.type]}`);
+    console.log(`仓库策略：${REPO_STRATEGIES[options.repoStrategy]}`);
+    console.log(`来源仓库：${options.sourceRepo || "无 / 待确认"}`);
     console.log(`代码仓库：${options.repoName || `${slug(options.projectName)}-app`}`);
     console.log(`Git 模式：${options.gitRoot}`);
     console.log(`角色工作区：${options.setupWorktrees ? "统一创建" : "不创建"}`);
@@ -581,6 +646,9 @@ function safePathSegment(value, fallback = "member") {
 }
 
 function validateOptions(options) {
+  if (!REPO_STRATEGIES[options.repoStrategy]) {
+    throw new Error("--repo-strategy 必须是 reuse、import、rewrite 或 create。");
+  }
   if (!Number.isInteger(options.sprintNumber) || options.sprintNumber < 0) {
     throw new Error("--sprint 必须是大于或等于 0 的整数。");
   }
@@ -589,6 +657,9 @@ function validateOptions(options) {
   }
   if (options.pushRemote && !options.remoteUrl) {
     throw new Error("--push 必须与 --remote=<url> 一起使用。");
+  }
+  if (options.repoStrategy === "reuse" && options.gitRoot === "repo") {
+    throw new Error("reuse 策略不会初始化或复制现有代码仓；请使用 --git-root=none 或 workspace。");
   }
   if (options.setupWorktrees && options.gitRoot !== "repo") {
     throw new Error("自动角色 worktree 仅支持 --git-root=repo；请改用独立代码仓模式或加 --no-worktrees。");
@@ -632,12 +703,52 @@ function safeRemoteUrl(remoteUrl) {
   }
 }
 
+function markdownCell(value, fallback = "待确认") {
+  const text = String(value || fallback).replace(/\r?\n/g, " ").replace(/\|/g, "\\|");
+  return text || fallback;
+}
+
+function renderRepoInventory(options, repoName) {
+  const source = markdownCell(safeRemoteUrl(options.sourceRepo));
+  const sprint = `Sprint ${options.sprintNumber}`;
+  const target = markdownCell(repoName);
+  const baseline = markdownCell(options.defaultBranch);
+
+  if (options.repoStrategy === "reuse") {
+    return `| R01 | ${target} | 当前主仓 | ${source} | ${baseline} | 复用现有技术栈 | 使用中 | ${sprint}确认 | FS |`;
+  }
+  if (options.repoStrategy === "import") {
+    return [
+      `| R01 | 来源代码 | 导入源 | ${source} | 待确认 | 只读基线 | 待冻结 | ${sprint} | TL / FS |`,
+      `| R02 | ${target} | 目标主仓 | 新建 | ${baseline} | 整理后技术栈 | 准备中 | ${sprint} | FS |`,
+    ].join("\n");
+  }
+  if (options.repoStrategy === "rewrite") {
+    return [
+      `| R01 | 现有系统 | 现行主仓 | ${source} | 待确认 | 原技术栈 | 维护中 | ${sprint} | TL / FS |`,
+      `| R02 | ${target} | 候选替代仓 | 新建 | ${baseline} | 新技术栈 | 验证中 | ${sprint} | TL / FS |`,
+    ].join("\n");
+  }
+  return `| R01 | ${target} | 新项目主仓 | 新建 | ${baseline} | 待技术选型 | 准备中 | ${sprint} | FS |`;
+}
+
 function buildReplacements(options, roles) {
   const preset = ROLE_PRESETS[options.preset] || ROLE_PRESETS.tech;
   const projectName = options.projectName;
   const repoName = options.repoName || `${slug(projectName)}-app`;
   const today = new Date().toISOString().slice(0, 10);
   const worktreeRoles = roles.filter((role) => role.worktree);
+  const sourceRepo = safeRemoteUrl(options.sourceRepo) || "待确认";
+  const isReuse = options.repoStrategy === "reuse";
+  const repoWorkspaceLocation = isReuse
+    ? `现有仓库：${sourceRepo}`
+    : `10_代码仓库/${repoName}/`;
+  const repoAction = {
+    reuse: "取得现有仓库权限，基于当前稳定分支建立 Sprint 集成分支；不复制代码历史",
+    import: "冻结来源快照，完成去敏与清单核对后导入目标仓库",
+    rewrite: "旧仓保持可维护，新仓验证新技术栈；达到切换门禁前不得替换生产主仓",
+    create: "完成技术选型、代码骨架、CI 和首个可运行增量",
+  }[options.repoStrategy];
 
   return {
     PROJECT_NAME: projectName,
@@ -645,6 +756,18 @@ function buildReplacements(options, roles) {
     PROJECT_SLUG: slug(projectName),
     PROJECT_TYPE: options.type,
     PROJECT_TYPE_LABEL: PROJECT_TYPES[options.type] || PROJECT_TYPES.new,
+    REPO_STRATEGY: options.repoStrategy,
+    REPO_STRATEGY_LABEL: REPO_STRATEGIES[options.repoStrategy],
+    SOURCE_REPO: sourceRepo,
+    REPO_WORKSPACE_LOCATION: repoWorkspaceLocation,
+    REPO_ACTION: repoAction,
+    REPO_INVENTORY_ROWS: renderRepoInventory(options, repoName),
+    REPO_SOP_SETUP_NOTE: isReuse
+      ? `当前为 reuse：生成器不会复制现有代码。先克隆 ${sourceRepo}，再在该克隆中创建 Sprint 分支和角色 worktree。`
+      : `当前为 ${options.repoStrategy}：目标仓位于 10_代码仓库/${repoName}/；生成器启用 worktree 时已统一创建角色工作区。`,
+    CODE_WORKSPACE_REPO_ENTRY: isReuse
+      ? ""
+      : `,\n    { "path": "10_代码仓库/${repoName}", "name": "Code Repo" }`,
     REPO_NAME: repoName,
     ROLE_PRESET: options.preset,
     ROLE_PRESET_LABEL: preset.label,
@@ -653,15 +776,27 @@ function buildReplacements(options, roles) {
     DEFAULT_BRANCH: options.defaultBranch,
     TEAMWORK_STATUS: options.setupWorktrees ? "✅" : "🔵",
     TEAMWORK_OUTPUT_TIME: options.setupWorktrees ? today : "-",
-    TEAMWORK_CHANGE: options.setupWorktrees ? "生成器创建角色 worktree" : "待手工创建角色 worktree",
+    TEAMWORK_CHANGE: options.setupWorktrees
+      ? "生成器创建角色 worktree"
+      : isReuse
+        ? "待在现有仓库创建角色工作区"
+        : "待手工创建角色 worktree",
     TEAMWORK_NOTE: options.setupWorktrees
       ? "验证身份和远端权限"
-      : "参考 08_团队开发协作SOP.md §4.1 手工创建",
-    TEAMWORK_FLOW_STAGE: options.setupWorktrees ? "工作区就绪" : "工作区准备",
+      : isReuse
+        ? "取得现有仓库权限后，参考 08_团队开发协作SOP.md §4.1 建立工作区"
+        : "参考 08_团队开发协作SOP.md §4.1 手工创建",
+    TEAMWORK_FLOW_STAGE: options.setupWorktrees
+      ? "工作区就绪"
+      : isReuse
+        ? "现有仓接入"
+        : "工作区准备",
     TEAMWORK_FLOW_STATE: options.setupWorktrees ? "🟢" : "🔵",
     TEAMWORK_FLOW_GAP: options.setupWorktrees
       ? "验证身份和远端权限"
-      : "创建 Git 仓库和角色 worktree",
+      : isReuse
+        ? "确认仓库权限、基线分支和角色工作区"
+        : "创建 Git 仓库和角色 worktree",
     ROLE_PO_NAME: roleNameById(roles, "po"),
     ROLE_SM_NAME: roleNameById(roles, "sm"),
     ROLE_TL_NAME: roleNameById(roles, "tl"),
@@ -690,6 +825,8 @@ function buildReplacements(options, roles) {
         projectName,
         repoName,
         type: options.type,
+        repoStrategy: options.repoStrategy,
+        sourceRepo: safeRemoteUrl(options.sourceRepo),
         preset: options.preset,
         gitRoot: options.gitRoot,
         setupWorktrees: options.setupWorktrees,
@@ -792,7 +929,9 @@ function renderRoleActionBoard(roles, today, options) {
     ...roles.map((role) => {
       const action = SPRINT0_ROLE_ACTION_DEFAULTS[role.id];
       const must = role.id === "fs"
-        ? (options.setupWorktrees ? action.mustReady : action.mustManual)
+        ? options.repoStrategy === "reuse"
+          ? action.mustReuse
+          : (options.setupWorktrees ? action.mustReady : action.mustManual)
         : action.must;
       return `| ${role.name}（${role.shortTitle}） | 0 | ${must} | ${action.wait} | ${action.ahead} | ${action.support} | ${action.stop} | 总表/Story/风险/PR | ${today} |`;
     }),
@@ -849,6 +988,16 @@ function collectTemplatePlan(src, dest, replacements, plan) {
   }
   plan.push({ type: "file", src, dest });
   return plan;
+}
+
+function filterTemplatePlan(plan, target, replacements, options) {
+  if (options.repoStrategy !== "reuse") return plan;
+  const repoRoot = path.resolve(target, "10_代码仓库", replacements.REPO_NAME);
+  return plan.filter((item) => {
+    const candidate = path.resolve(item.dest);
+    const relative = path.relative(repoRoot, candidate);
+    return relative.startsWith("..") || path.isAbsolute(relative);
+  });
 }
 
 function applyTemplatePlan(plan, replacements) {
@@ -977,6 +1126,8 @@ function printHelp() {
 
 选项:
   --type=new|legacy|product|prototype
+  --repo-strategy=reuse|import|rewrite|create
+  --source-repo=<url-or-path>   现有/来源仓库，仅登记并用于迁移决策
   --preset=tech|myth|wuxia|compass|studio|greek
   --repo=<repo-name>
   --role.<slot>=<name>           槽位: po|sm|tl|midbe|srfe|midfe|fs
@@ -996,7 +1147,8 @@ function printHelp() {
   --force                        允许写入非空目录
 
 示例:
-  node index.mjs acme-ark --type=legacy --preset=greek --role.midfe=Aurora
+  node index.mjs acme-ark --type=product --repo-strategy=reuse --source-repo=https://example.com/acme.git
+  node index.mjs acme-next --type=legacy --repo-strategy=rewrite --source-repo=https://example.com/acme.git
   node index.mjs acme-ark --remote=git@github.com:acme/ark.git --role-test-commits --push
   node index.mjs acme-ark --config=./scrum.config.json --dry-run
 
@@ -1005,6 +1157,8 @@ function printHelp() {
     "projectName": "acme-ark",
     "repoName": "acme-ark-app",
     "type": "new",
+    "repoStrategy": "create",
+    "sourceRepo": "",
     "preset": "tech",
     "gitRoot": "repo",
     "setupWorktrees": true,
@@ -1041,7 +1195,25 @@ async function main() {
     process.exit(1);
   }
   if (!PROJECT_TYPES[options.type]) options.type = "new";
+  if (!options.repoStrategy) {
+    options.repoStrategy = DEFAULT_REPO_STRATEGY[options.type] || "create";
+  }
+  if (!REPO_STRATEGIES[options.repoStrategy]) options.repoStrategy = "create";
   if (!ROLE_PRESETS[options.preset]) options.preset = "tech";
+  if (
+    options.repoStrategy === "reuse"
+    && !options._gitRootFromCli
+    && !options._gitRootFromConfig
+  ) {
+    options.gitRoot = "none";
+  }
+  if (
+    options.repoStrategy === "reuse"
+    && !options._worktreesFromCli
+    && !options._worktreesFromConfig
+  ) {
+    options.setupWorktrees = false;
+  }
   if (!["workspace", "repo", "none"].includes(options.gitRoot)) options.gitRoot = "repo";
   if (options.gitRoot !== "repo" && !options._worktreesFromCli) options.setupWorktrees = false;
   if (!options.setupWorktrees) options.roleTestCommits = false;
@@ -1052,13 +1224,20 @@ async function main() {
   const replacements = buildReplacements(options, roles);
   const target = path.resolve(process.cwd(), options.projectName);
 
-  const plan = collectTemplatePlan(templateDir, target, replacements, []);
+  const plan = filterTemplatePlan(
+    collectTemplatePlan(templateDir, target, replacements, []),
+    target,
+    replacements,
+    options,
+  );
 
   if (options.dryRun) {
     console.log(`\n[dry-run] 目标目录：${target}`);
     console.log(`[dry-run] 项目类型：${replacements.PROJECT_TYPE_LABEL}`);
+    console.log(`[dry-run] 仓库策略：${replacements.REPO_STRATEGY_LABEL}`);
+    console.log(`[dry-run] 来源仓库：${replacements.SOURCE_REPO}`);
     console.log(`[dry-run] 角色套装：${replacements.ROLE_PRESET_LABEL}`);
-    console.log(`[dry-run] 代码仓库骨架：10_代码仓库/${replacements.REPO_NAME}`);
+    console.log(`[dry-run] 代码位置：${replacements.REPO_WORKSPACE_LOCATION}`);
     console.log(`[dry-run] Git 模式：${options.gitRoot}`);
     console.log(`[dry-run] 角色 worktree：${options.setupWorktrees ? "5 个" : "不创建"}`);
     console.log(`[dry-run] 角色测试提交：${options.roleTestCommits ? "创建" : "不创建"}`);
@@ -1077,8 +1256,9 @@ async function main() {
 
   console.log(`\n已创建 Scrum 团队协同工作区：${target}`);
   console.log(`项目类型：${replacements.PROJECT_TYPE_LABEL}`);
+  console.log(`仓库策略：${replacements.REPO_STRATEGY_LABEL}`);
   console.log(`角色套装：${replacements.ROLE_PRESET_LABEL}`);
-  console.log(`代码仓库骨架：10_代码仓库/${replacements.REPO_NAME}`);
+  console.log(`代码位置：${replacements.REPO_WORKSPACE_LOCATION}`);
   if (gitResult.gitTarget) {
     console.log(`Git 仓库：${gitResult.gitTarget}`);
     console.log(`Sprint 集成分支：${gitResult.sprintBranch}`);
@@ -1087,7 +1267,7 @@ async function main() {
   console.log("\n下一步：");
   console.log("1. 打开 00_项目导航/00_项目首页.md");
   console.log("2. 检查 00_项目导航/02_角色与联系方式.md");
-  console.log("3. 根据项目类型完善 03_迭代运行/Sprint-0-启动/00_Sprint计划.md");
+  console.log("3. 确认本 Sprint 仓库策略，完善 10_代码仓库/00_仓库清单.md");
   console.log("4. 校准 03_迭代运行/Sprint-0-启动/01_Sprint流程监控台.md");
 }
 

@@ -15,8 +15,8 @@ last-updated: {{CREATED_DATE}}
 
 | ID | 优先级 | 产出物名称 | 存放位置 | 主责人 | 状态 | 产出时间 | 依赖项 | 领取人 | 参考人 | 交付时间 | 变更摘要 | 备注 | 文档版本 | 评审状态 | 评审人 |
 | --- | :---: | --- | --- | --- | :---: | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| E01 | P0 | 主代码仓库骨架 | `10_代码仓库/{{REPO_NAME}}/README.md` | FS | ✅ | {{CREATED_DATE}} | A04 | 全员 | TL | {{CREATED_DATE}} | 生成器产出 | 不维护重复 01-docs | V1.0 | 待评审 | FS, TL |
-| E02 | P0 | TeamWork 协同规则 | `10_代码仓库/{{REPO_NAME}}/README.md` | FS | {{TEAMWORK_STATUS}} | {{CREATED_DATE}} | E01 | 编码角色 | TL | {{TEAMWORK_OUTPUT_TIME}} | {{TEAMWORK_CHANGE}} | {{TEAMWORK_NOTE}} | V1.0 | 待评审 | FS, TL |
+| E01 | P0 | 代码仓库策略与清单 | `10_代码仓库/00_仓库清单.md` | FS | ✅ | {{CREATED_DATE}} | A04, C01 | 全员 | TL, SM | {{CREATED_DATE}} | {{REPO_STRATEGY_LABEL}} | 来源：{{SOURCE_REPO}} | V1.0 | 待评审 | FS, TL |
+| E02 | P0 | TeamWork 协同规则 | `00_项目导航/08_团队开发协作SOP.md` | FS | {{TEAMWORK_STATUS}} | {{CREATED_DATE}} | E01 | 编码角色 | TL | {{TEAMWORK_OUTPUT_TIME}} | {{TEAMWORK_CHANGE}} | {{TEAMWORK_NOTE}} | V1.0 | 待评审 | FS, TL |
 | E03 | P0 | 发布策略 | `06_发布运维/00_发布策略.md` | FS | 🔵 | - | C01, D01 | PO, TL | - | - | 待补 | 发布/回滚/Runbook | V0.1 | 待评审 | FS, TL |
 
 ## 评审意见追加

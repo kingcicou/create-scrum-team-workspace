@@ -3,8 +3,9 @@
 > 面向编码实施团队的"上手即用"操作手册。新成员入组 30 分钟内能开始干活。
 > 原理与"为什么"，见 `知识库/Scrum/10_Git仓库布局与提交模式解析.md`。
 
-**项目类型：** {{PROJECT_TYPE_LABEL}}
-**代码仓库：** `10_代码仓库/{{REPO_NAME}}/`
+**项目背景类型：** {{PROJECT_TYPE_LABEL}}
+**本 Sprint 仓库策略：** {{REPO_STRATEGY_LABEL}}
+**代码位置：** {{REPO_WORKSPACE_LOCATION}}
 **适用对象：** PO、SM、TL、Mid.BE、Sr.FE、Mid.FE、FS — 全员
 
 ---
@@ -49,7 +50,8 @@
 ```bash
 cd <项目根目录>
 ls -la .git              # 外层是否有 .git
-ls -la 10_代码仓库/{{REPO_NAME}}/.git   # 内层是否有 .git
+cd <实际代码仓克隆目录>
+ls -la .git              # 代码仓是否有 .git
 ```
 
 对照下表：
@@ -69,9 +71,9 @@ ls -la 10_代码仓库/{{REPO_NAME}}/.git   # 内层是否有 .git
 
 ### 4.1 一次性：克隆 + 建个人 worktree
 
-使用生成器默认 `repo` 模式时，5 个编码角色 worktree 已统一创建，直接检查
-`10_代码仓库/{{REPO_NAME}}/TeamWork/` 和 `roles.config.json` 即可。以下命令用于
-远端重新克隆、中途加入或手工修复。
+{{REPO_SOP_SETUP_NOTE}}
+
+以下命令用于远端重新克隆、中途加入或手工修复。
 
 ```bash
 # 假设你的显示名是 Evan，槽位是 Mid.FE/QA
