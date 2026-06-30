@@ -203,60 +203,6 @@ const DEFAULT_REPO_STRATEGY = {
   prototype: "import",
 };
 
-const SPRINT0_ROLE_ACTION_DEFAULTS = {
-  po: {
-    must: "B01 产品愿景；B03 首批 Backlog",
-    wait: "A02 团队协议确认",
-    ahead: "B02 用户场景、价值假设",
-    support: "为 Story 澄清价值与 AC",
-    stop: "未取舍前不承诺范围",
-  },
-  sm: {
-    must: "A02/A04/A05；校准本监控台",
-    wait: "各事实源责任人更新",
-    ahead: "准备事件日历和门禁检查",
-    support: "暴露依赖、协调清障",
-    stop: "不替 PO/TL 派活或决策",
-  },
-  tl: {
-    must: "C01 技术全景；C02 ADR 候选",
-    wait: "B01 愿景、B03 候选 Story",
-    ahead: "现状诊断、风险 Spike",
-    support: "指导 BE/FE 契约拆分",
-    stop: "关键契约未评审不固化实现",
-  },
-  midbe: {
-    must: "协作 C03 API、C04 数据模型",
-    wait: "B03 Story、C01 技术全景",
-    ahead: "接口 Spike、测试骨架",
-    support: "补边界场景和集成测试设计",
-    stop: "AC/契约未明不进入完整实现",
-  },
-  srfe: {
-    must: "体验基线、前端架构和 C03 评审",
-    wait: "B01/B02 场景、B03 Story",
-    ahead: "设计令牌、组件约定、可访问性清单",
-    support: "指导 Mid.FE 拆分页面状态",
-    stop: "交互和契约未定不固化关键流程",
-  },
-  midfe: {
-    must: "协作页面拆分和前端测试设计",
-    wait: "B03 Story、C03 API、体验基线",
-    ahead: "Mock、组件骨架、异常态/E2E 用例",
-    support: "参加 API/UX 评审",
-    stop: "不自行假设未评审字段",
-  },
-  fs: {
-    mustReady: "验证 E01/E02、角色身份和仓库权限",
-    mustManual: "创建 E01/E02、角色工作区和身份",
-    mustReuse: "确认 E01 现仓清单、权限、基线分支和角色工作区",
-    wait: "C01 架构、D01 质量门禁",
-    ahead: "CI 骨架、环境检查和回滚清单",
-    support: "协助 TL 集成和团队 Git 上手",
-    stop: "发布门禁未齐不开放部署",
-  },
-};
-
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 const templateDir = path.join(rootDir, "template");
 
@@ -808,7 +754,7 @@ function buildReplacements(options, roles) {
     ROLE_CARDS: renderRoleCards(roles),
     ABILITY_MATRIX: renderAbilityMatrix(roles),
     BACKUP_TABLE: renderBackupTable(roles),
-    ROLE_ACTION_BOARD: renderRoleActionBoard(roles, today, options),
+    TASK_EXECUTION_TABLE: renderTaskExecutionTable(roles, today, options),
     WORKTREE_DIRS: worktreeRoles.map((role) => `  ${role.dirName}/`).join("\n"),
     WORKTREE_COMMANDS: worktreeRoles
       .map((role) => `git worktree add TeamWork/${role.dirName} -b ${role.branchName} sprint-${options.sprintNumber}`)
@@ -922,19 +868,26 @@ function renderBackupTable(roles) {
   ].join("\n");
 }
 
-function renderRoleActionBoard(roles, today, options) {
+function renderTaskExecutionTable(roles, today, options) {
+  const byId = Object.fromEntries(roles.map((role) => [role.id, role]));
+  const fsTask = options.repoStrategy === "reuse"
+    ? "接入现仓：权限、基线分支、CI、角色工作区"
+    : "建立目标仓、CI、Sprint 分支和角色工作区";
+  const rows = [
+    ["T01", "Sprint Goal", "确认价值目标、Story 与 AC", "D 决策", "M", "po", "sm", "-", "Backlog / AC"],
+    ["T02", "T01", "拆分节奏、依赖和准入门禁", "D 流程", "S", "sm", "po", "T01", "Sprint 计划 / 任务表"],
+    ["T03", "T01", "技术全景、模块边界与关键 ADR", "A 架构", "L", "tl", "fs", "T01", "技术全景 / ADR"],
+    ["T04", "T03", "API、数据与后端实现切片", "I 实现", "M", "midbe", "tl", "T03", "代码 / 测试 / PR"],
+    ["T05", "T01/T03", "体验基线与前端架构切片", "A 架构", "M", "srfe", "tl", "T01,T03", "设计约束 / 关键 PR"],
+    ["T06", "T04/T05", "页面、联调与自动化验证切片", "I/V 实现验证", "S", "midfe", "srfe", "T04,T05", "代码 / 测试证据"],
+    ["T07", "T03", fsTask, "O 工程环境", "M", "fs", "tl", "T03", "仓库清单 / CI / 操作说明"],
+  ];
   return [
-    "| 角色 | 当前 WIP（成员站会前自填） | 必做 | 等待输入 | 可提前先行 | 协作清障 | 暂停/升级 | 依据 | 最后更新 |",
-    "| --- | :---: | --- | --- | --- | --- | --- | --- | --- |",
-    ...roles.map((role) => {
-      const action = SPRINT0_ROLE_ACTION_DEFAULTS[role.id];
-      const must = role.id === "fs"
-        ? options.repoStrategy === "reuse"
-          ? action.mustReuse
-          : (options.setupWorktrees ? action.mustReady : action.mustManual)
-        : action.must;
-      return `| ${role.name}（${role.shortTitle}） | 0 | ${must} | ${action.wait} | ${action.ahead} | ${action.support} | ${action.stop} | 总表/Story/风险/PR | ${today} |`;
-    }),
+    "| ID | 父项 | 任务 | 级别 | 复杂度 | Owner | Reviewer | 状态 | 前置 | 输出/证据 | 更新 |",
+    "| --- | --- | --- | --- | :---: | --- | --- | --- | --- | --- | --- |",
+    ...rows.map(([id, parent, task, level, complexity, owner, reviewer, predecessor, evidence]) =>
+      `| ${id} | ${parent} | ${task} | ${level} | ${complexity} | ${byId[owner].name} | ${byId[reviewer].name} | 未开始 | ${predecessor} | ${evidence} | ${today} |`
+    ),
   ].join("\n");
 }
 

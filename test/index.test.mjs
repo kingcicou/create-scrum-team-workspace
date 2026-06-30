@@ -207,7 +207,7 @@ test("product reuse records the existing repo without creating a code copy", () 
       path.join(target, "03_迭代运行", "Sprint-0-启动", "01_Sprint流程监控台.md"),
       "utf8",
     );
-    assert.ok(monitor.includes("确认 E01 现仓清单、权限、基线分支和角色工作区"));
+    assert.ok(monitor.includes("接入现仓：权限、基线分支、CI、角色工作区"));
   } finally {
     fs.rmSync(sandbox, { recursive: true, force: true });
   }
@@ -363,7 +363,7 @@ test("generates operations guidance using the repository inventory", () => {
   }
 });
 
-test("generates Sprint flow monitor with named role actions and no stale progress file", () => {
+test("generates one Sprint task table with named owners and dependency flow", () => {
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-flow-"));
   const target = path.join(sandbox, "project");
 
@@ -391,23 +391,24 @@ test("generates Sprint flow monitor with named role actions and no stale progres
     assert.ok(fs.existsSync(responseTemplate), "SM standard response template should exist");
 
     const content = fs.readFileSync(monitor, "utf8");
-    assert.ok(content.includes("Muse（PO）"), "role action board should use preset names");
-    assert.ok(content.includes("Bridge（FS/DevOps）"), "coding role should be rendered");
-    assert.ok(content.includes("B01 产品愿景"), "Sprint 0 role actions should be prefilled");
-    assert.ok(content.includes("创建 E01/E02"), "FS action should follow --no-git mode");
-    assert.ok(content.includes("当前 WIP（成员站会前自填）"));
+    assert.ok(content.includes("| T01 | Sprint Goal |"), "task table should be prefilled");
+    assert.ok(content.includes("| Muse | Tempo |"), "decision task should use preset PO/SM names");
+    assert.ok(content.includes("| Bridge | Forge |"), "environment task should use preset FS/TL names");
+    assert.ok(content.includes("建立目标仓、CI、Sprint 分支和角色工作区"));
+    assert.ok(content.includes("## 4. Sprint 任务执行表"));
+    assert.ok(content.includes("不为普通实现任务另写报告"));
     assert.ok(content.includes("| CI 红灯 | 超过 2 小时 | ⚪ |"));
     assert.ok(content.includes("铁律：Sprint 结束后归档本监控台"));
     assert.ok(content.includes("## 3. 依赖时间线与并行泳道"));
     assert.ok(content.includes("G1 Sprint 1 工程准入"));
     assert.ok(content.includes("flowchart LR"));
-    assert.ok(content.includes("等待输入"), "action classification should be present");
+    assert.ok(content.includes("外部环境待验证"), "environment verification should not be a blocker");
     assert.ok(
       content.includes("创建 Git 仓库和角色 worktree"),
       "--no-git should keep code collaboration flow pending",
     );
     assert.equal(
-      /\{\{ROLE_ACTION_BOARD\}\}|\{\{CREATED_DATE\}\}|\{\{TEAMWORK_[A-Z_]+\}\}/.test(content),
+      /\{\{TASK_EXECUTION_TABLE\}\}|\{\{CREATED_DATE\}\}|\{\{TEAMWORK_[A-Z_]+\}\}/.test(content),
       false,
     );
 
@@ -417,9 +418,9 @@ test("generates Sprint flow monitor with named role actions and no stale progres
     const ledgerE = fs.readFileSync(path.join(ledgerDir, "E_发布运维.md"), "utf8");
     assert.ok(ledgerIndex.includes("[A_项目管理.md](A_项目管理.md)"), "index should link to A");
     assert.ok(ledgerIndex.includes("owner: SM"), "index frontmatter should declare owner");
-    assert.ok(ledgerA.includes("| A07 | P0 | Sprint 0 流程监控台 |"));
+    assert.ok(ledgerA.includes("| A07 | P0 | Sprint 0 任务与流程监控台 |"));
     assert.ok(ledgerA.includes("| A08 | P1 | 团队协作交互协议与 SM 播报模板 |"));
-    assert.ok(ledgerA.includes("| A09 | P0 | 文档协作与并发控制规范"));
+    assert.ok(ledgerA.includes("| A09 | P2 | 文档协作与并发控制规范"));
     assert.ok(ledgerA.includes("| A11 | P0 | Sprint关闭与证据治理规范"));
     assert.ok(ledgerA.includes("| A12 | P0 | Sprint 0关闭与Sprint 1准入检查表"));
     assert.ok(
@@ -464,7 +465,7 @@ test("generates Sprint flow monitor with named role actions and no stale progres
   }
 });
 
-test("v0.4.0 splits 06 ledger into per-role tables and emits CODEOWNERS", () => {
+test("keeps advanced document controls available but optional", () => {
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-04-"));
   const target = path.join(sandbox, "project");
 
@@ -534,6 +535,13 @@ test("v0.4.0 splits 06 ledger into per-role tables and emits CODEOWNERS", () => 
       fs.existsSync(path.join(target, "知识库", "Scrum", "13_文档协作与并发控制规范.md")),
       "13 spec should exist",
     );
+    const concurrencyGuide = fs.readFileSync(
+      path.join(target, "知识库", "Scrum", "13_文档协作与并发控制规范.md"),
+      "utf8",
+    );
+    assert.ok(concurrencyGuide.includes("| L0 默认 |"));
+    assert.ok(concurrencyGuide.includes("CODEOWNERS 可用"));
+    assert.ok(concurrencyGuide.includes("只对 L1/L2 启用"));
     assert.ok(
       fs.existsSync(path.join(target, "知识库", "项目模板", "04_文档协作机制迭代计划.md")),
       "04 iteration plan should exist",

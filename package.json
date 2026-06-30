@@ -1,6 +1,6 @@
 {
   "name": "create-scrum-team-workspace",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Scaffold a Scrum team collaboration workspace with roles, Sprint 0, backlog, engineering, quality, delivery, metrics, and code repository skeletons.",
   "type": "module",
   "license": "MIT",
