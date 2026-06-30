@@ -346,7 +346,8 @@ git worktree add TeamWork/Evan_Review -d origin/sprint-1
 - [ ] PR 合并到 sprint-x
 - [ ] FS 集成结论：可演示
 - [ ] PO 验收通过
-- [ ] Story 工作区记录：分支、PR、CI、测试证据、集成结论链接
+- [ ] Sprint 任务表已链接分支/PR、测试证据和集成结论
+- [ ] 仅复杂、跨角色 Story 按需补充独立工作区
 ```
 
 任一项缺失，**不能**关 Done。详见 `知识库/Scrum/08_质量门禁与测试金字塔指南.md`。

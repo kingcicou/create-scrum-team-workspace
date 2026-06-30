@@ -21,7 +21,7 @@ last-updated: {{CREATED_DATE}}
 | A04 | P0 | 输入输出管理规范 | `00_项目导航/05_输入输出管理规范.md` | SM | 🟢 | {{CREATED_DATE}} | - | 全员 | - | - | 待团队确认 | 核心执行规则 | V1.0 | 待评审 | PO, TL |
 | A05 | P0 | 团队输入输出总表（本目录） | `00_项目导航/06_团队输入输出总表/` | SM | 🟢 | {{CREATED_DATE}} | A04 | 全员 | - | - | 正式产物变化时更新 | 普通 Task 不进入本表 | V1.0 | 待评审 | PO |
 | A06 | P1 | SM 作战手册 | `00_项目导航/SM_作战手册_Sutherland.md` | SM | ✅ | {{CREATED_DATE}} | A02, A04, A05 | SM | - | {{CREATED_DATE}} | 模板参考 | 团队成员无需评审 | V1.0 | 模板内置 | - |
-| A07 | P0 | Sprint 0 任务与流程监控台 | `03_迭代运行/Sprint-0-启动/01_Sprint流程监控台.md` | SM | 🟢 | {{CREATED_DATE}} | A05 | 全员 | PO, TL, FS | - | 初始任务拆分已生成 | 唯一 Sprint 任务表 | V1.0 | 待评审 | PO, TL |
+| A07 | P0 | Sprint 0 任务表与流程看板 | `03_迭代运行/Sprint-0-启动/01_Sprint任务表与流程看板.md` | SM | 🟢 | {{CREATED_DATE}} | A05 | 全员 | PO, TL, FS | - | 初始任务拆分已生成 | 唯一 Sprint 任务表 | V1.0 | 待评审 | PO, TL |
 | A08 | P1 | 团队协作交互协议与 SM 播报模板 | `00_项目导航/09_SM教练查询与回复模板.md` | SM | ✅ | {{CREATED_DATE}} | A07 | 全员 | - | {{CREATED_DATE}} | 生成器产出 | 状态包、确认纠偏、群聊快报、流程全景和角色状态卡 | V1.1 | 待评审 | 全员 |
 | A09 | P2 | 文档协作与并发控制规范 | `知识库/Scrum/13_文档协作与并发控制规范.md` | SM | ✅ | {{CREATED_DATE}} | A04 | 按需查阅 | PO, TL, FS | {{CREATED_DATE}} | v0.6 精简 | 仅真实高冲突时升级 | V2.0 | 模板内置 | - |
 | A10 | P2 | CODEOWNERS 映射（可选） | `.github/CODEOWNERS` | SM + FS | ⚪ | - | A03 | 有平台能力时 | - | - | 不配置也可开工 | 仅自动通知，不是门禁 | V0.1 | 可选 | FS |

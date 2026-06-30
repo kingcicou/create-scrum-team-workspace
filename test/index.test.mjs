@@ -55,7 +55,7 @@ test("creates isolated coding-role worktrees and identities", () => {
             target,
             "03_迭代运行",
             "Sprint-0-启动",
-            "01_Sprint流程监控台.md",
+            "01_Sprint任务表与流程看板.md",
           ),
           "utf8",
         )
@@ -204,7 +204,7 @@ test("product reuse records the existing repo without creating a code copy", () 
     assert.ok(sprintPlan.includes("每个 Sprint Planning 重新确认"));
 
     const monitor = fs.readFileSync(
-      path.join(target, "03_迭代运行", "Sprint-0-启动", "01_Sprint流程监控台.md"),
+      path.join(target, "03_迭代运行", "Sprint-0-启动", "01_Sprint任务表与流程看板.md"),
       "utf8",
     );
     assert.ok(monitor.includes("接入现仓：权限、基线分支、CI、角色工作区"));
@@ -371,7 +371,8 @@ test("generates one Sprint task table with named owners and dependency flow", ()
     runCli([target, "--preset=studio", "--repo=flow-app", "--no-git"]);
 
     const sprintDir = path.join(target, "03_迭代运行", "Sprint-0-启动");
-    const monitor = path.join(sprintDir, "01_Sprint流程监控台.md");
+    const monitor = path.join(sprintDir, "01_Sprint任务表与流程看板.md");
+    const oldMonitor = path.join(sprintDir, "01_Sprint流程监控台.md");
     const oldProgress = path.join(sprintDir, "01_工作进度表.md");
     const coachGuide = path.join(
       target,
@@ -385,7 +386,8 @@ test("generates one Sprint task table with named owners and dependency flow", ()
       "09_SM教练查询与回复模板.md",
     );
 
-    assert.ok(fs.existsSync(monitor), "Sprint flow monitor should exist");
+    assert.ok(fs.existsSync(monitor), "Sprint task board should exist");
+    assert.equal(fs.existsSync(oldMonitor), false, "old monitor name should not be generated");
     assert.equal(fs.existsSync(oldProgress), false, "old progress table should not be generated");
     assert.ok(fs.existsSync(coachGuide), "SM coaching decision guide should exist");
     assert.ok(fs.existsSync(responseTemplate), "SM standard response template should exist");
@@ -412,13 +414,26 @@ test("generates one Sprint task table with named owners and dependency flow", ()
       false,
     );
 
+    const onboarding = fs.readFileSync(
+      path.join(target, "知识库", "Scrum", "09_角色学习路径与成长指南.md"),
+      "utf8",
+    );
+    const glossary = fs.readFileSync(
+      path.join(target, "00_项目导航", "04_术语表.md"),
+      "utf8",
+    );
+    assert.ok(onboarding.includes("## 1. 唯一上手入口"));
+    assert.ok(onboarding.includes("01_Sprint任务表与流程看板.md` §4"));
+    assert.ok(onboarding.includes("它是拆分概念，不是固定目录"));
+    assert.ok(glossary.includes("由 `00_项目导航/00_项目首页.md` 显式指向"));
+
     const ledgerDir = path.join(target, "00_项目导航", "06_团队输入输出总表");
     const ledgerIndex = fs.readFileSync(path.join(ledgerDir, "00_索引.md"), "utf8");
     const ledgerA = fs.readFileSync(path.join(ledgerDir, "A_项目管理.md"), "utf8");
     const ledgerE = fs.readFileSync(path.join(ledgerDir, "E_发布运维.md"), "utf8");
     assert.ok(ledgerIndex.includes("[A_项目管理.md](A_项目管理.md)"), "index should link to A");
     assert.ok(ledgerIndex.includes("owner: SM"), "index frontmatter should declare owner");
-    assert.ok(ledgerA.includes("| A07 | P0 | Sprint 0 任务与流程监控台 |"));
+    assert.ok(ledgerA.includes("| A07 | P0 | Sprint 0 任务表与流程看板 |"));
     assert.ok(ledgerA.includes("| A08 | P1 | 团队协作交互协议与 SM 播报模板 |"));
     assert.ok(ledgerA.includes("| A09 | P2 | 文档协作与并发控制规范"));
     assert.ok(ledgerA.includes("| A11 | P0 | Sprint关闭与证据治理规范"));
@@ -460,6 +475,30 @@ test("generates one Sprint task table with named owners and dependency flow", ()
     const guideContent = fs.readFileSync(coachGuide, "utf8");
     assert.ok(guideContent.includes("属于选读材料"));
     assert.ok(guideContent.includes("本规范只解释 SM 如何判定，不再重复操作模板"));
+
+    const home = fs.readFileSync(
+      path.join(target, "00_项目导航", "00_项目首页.md"),
+      "utf8",
+    );
+    assert.ok(home.includes("## 30 分钟上手"));
+    assert.ok(home.includes("不要求通读知识库"));
+
+    const roleOnboarding = fs.readFileSync(
+      path.join(target, "知识库", "Scrum", "09_角色学习路径与成长指南.md"),
+      "utf8",
+    );
+    assert.ok(roleOnboarding.includes("能开始交付后，再按问题查阅一份指南"));
+    assert.ok(roleOnboarding.includes("普通执行角色不必先读"));
+    assert.equal(roleOnboarding.includes("每位成员都应保留"), false);
+
+    const knowledgeCatalog = fs.readFileSync(
+      path.join(target, "知识库", "00_知识库总目录.md"),
+      "utf8",
+    );
+    assert.ok(knowledgeCatalog.includes("固定生成 `91` 个 Markdown 文件"));
+    assert.ok(knowledgeCatalog.includes("| 项目导航 | 17 |"));
+    assert.ok(knowledgeCatalog.includes("### 可预见与不可预见"));
+    assert.ok(knowledgeCatalog.includes("数量和内容不可预见"));
   } finally {
     fs.rmSync(sandbox, { recursive: true, force: true });
   }

@@ -47,7 +47,7 @@ flowchart LR
     A["产品发现"] --> B["Product Backlog"]
     B --> C["Refinement / DoR"]
     C --> D["Sprint Planning"]
-    D --> E["Story 工作区"]
+    D --> E["Sprint 任务表"]
     E --> F["TeamWork / 分支开发"]
     F --> G["PR / CI / 测试"]
     G --> H["Sprint Review"]
@@ -67,7 +67,7 @@ flowchart LR
 
 ## 6. 从哪里开始读
 
-- 全员必读：本总纲、`00_项目导航/01_团队工作协议.md`、当前 Sprint 任务表。
+- 全员先读：`00_项目导航/00_项目首页.md`、团队协议和首页指向的当前 Sprint 任务表。
 - 新成员按需：`02_角色协同与能力模型.md`。
 - SM 选读：`03_落地执行与SM作战指南.md` 和 `12_SM流程监控与角色行动决策规范.md`。
 - Sprint收尾责任人：重点读`14_Sprint关闭与证据治理规范.md`。

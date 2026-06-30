@@ -1,4 +1,4 @@
-# Sprint 0 · 流程监控台
+# Sprint 0 · 任务表与流程看板
 
 **Sprint Goal：** 建立团队共同语言、目录体系、首批 Backlog 和工程落地基线。
 

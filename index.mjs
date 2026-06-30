@@ -1221,7 +1221,7 @@ async function main() {
   console.log("1. 打开 00_项目导航/00_项目首页.md");
   console.log("2. 检查 00_项目导航/02_角色与联系方式.md");
   console.log("3. 确认本 Sprint 仓库策略，完善 10_代码仓库/00_仓库清单.md");
-  console.log("4. 校准 03_迭代运行/Sprint-0-启动/01_Sprint流程监控台.md");
+  console.log("4. 校准 03_迭代运行/Sprint-0-启动/01_Sprint任务表与流程看板.md");
 }
 
 main().catch((error) => {
