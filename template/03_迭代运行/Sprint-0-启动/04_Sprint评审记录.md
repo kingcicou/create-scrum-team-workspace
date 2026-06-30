@@ -25,3 +25,6 @@
 ## 未进入 Done 的事项
 
 - 
+
+> 未进入 Done 的事项必须在 `07_Sprint关闭与准入检查表.md` 中标记为
+> carry-over、cancel 或完成关闭，不得靠延长 Sprint 隐藏。

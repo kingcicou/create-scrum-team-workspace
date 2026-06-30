@@ -296,8 +296,10 @@ test("generates Sprint flow monitor with named role actions and no stale progres
     assert.ok(ledgerIndex.includes("[A_项目管理.md](A_项目管理.md)"), "index should link to A");
     assert.ok(ledgerIndex.includes("owner: SM"), "index frontmatter should declare owner");
     assert.ok(ledgerA.includes("| A07 | P0 | Sprint 0 流程监控台 |"));
-    assert.ok(ledgerA.includes("| A08 | P1 | SM 教练查询与回复模板 |"));
+    assert.ok(ledgerA.includes("| A08 | P1 | 团队协作交互协议与 SM 播报模板 |"));
     assert.ok(ledgerA.includes("| A09 | P0 | 文档协作与并发控制规范"));
+    assert.ok(ledgerA.includes("| A11 | P0 | Sprint关闭与证据治理规范"));
+    assert.ok(ledgerA.includes("| A12 | P0 | Sprint 0关闭与Sprint 1准入检查表"));
     assert.ok(
       ledgerE.includes("待手工创建角色 worktree"),
       "--no-git should render the manual TeamWork path",
@@ -306,10 +308,35 @@ test("generates Sprint flow monitor with named role actions and no stale progres
     assert.equal(/\{\{TEAMWORK_[A-Z_]+\}\}/.test(ledgerE), false);
 
     const responseContent = fs.readFileSync(responseTemplate, "utf8");
-    assert.ok(responseContent.includes("## 2. 关键因果链"));
-    assert.ok(responseContent.includes("## 3. 当前并行泳道"));
-    assert.ok(responseContent.includes("## 4. 下一汇合门"));
-    assert.ok(responseContent.includes("完成后会解锁"));
+    for (const protocolPart of [
+      "## 3. 成员向 SM 上报",
+      "### 3.1 状态包",
+      "### 3.2 SM 确认",
+      "### 3.3 状态纠偏",
+      "## 4. SM 群聊快报",
+      "## 5. SM 流程全景",
+      "## 6. 单角色状态卡",
+    ]) {
+      assert.ok(
+        responseContent.includes(protocolPart),
+        `interaction protocol should include ${protocolPart}`,
+      );
+    }
+    assert.ok(responseContent.includes("关键链："));
+    assert.ok(responseContent.includes("并行工作："));
+    assert.ok(responseContent.includes("完成后解锁："));
+    assert.ok(responseContent.includes("没有状态变化时不重复上报"));
+
+    const agreement = fs.readFileSync(
+      path.join(target, "00_项目导航", "01_团队工作协议.md"),
+      "utf8",
+    );
+    assert.ok(agreement.includes("## 状态同步"));
+    assert.ok(agreement.includes("不另建日报或重复台账"));
+
+    const guideContent = fs.readFileSync(coachGuide, "utf8");
+    assert.ok(guideContent.includes("属于选读材料"));
+    assert.ok(guideContent.includes("本规范只解释 SM 如何判定，不再重复操作模板"));
   } finally {
     fs.rmSync(sandbox, { recursive: true, force: true });
   }
@@ -400,6 +427,59 @@ test("v0.4.0 splits 06 ledger into per-role tables and emits CODEOWNERS", () => 
     assert.ok(
       home.includes("06_团队输入输出总表/00_索引.md"),
       "home page should link to ledger index",
+    );
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("v0.5.0 generates lightweight Sprint closure guidance", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-05-"));
+  const target = path.join(sandbox, "project");
+
+  try {
+    runCli([target, "--repo=closure-app", "--no-git", "--no-worktrees"]);
+
+    const sprintDir = path.join(target, "03_迭代运行", "Sprint-0-启动");
+    const closure = path.join(sprintDir, "07_Sprint关闭与准入检查表.md");
+    const closureGuide = path.join(
+      target,
+      "知识库",
+      "Scrum",
+      "14_Sprint关闭与证据治理规范.md",
+    );
+
+    for (const file of [closure, closureGuide]) {
+      assert.ok(fs.existsSync(file), `${path.basename(file)} should be generated`);
+    }
+
+    const guide = fs.readFileSync(closureGuide, "utf8");
+    for (const lesson of [
+      "Approve、门禁通过和交付不能混用",
+      "正式文档状态必须一致",
+      "事实冲突先裁决再同步",
+      "门禁标准必须提前写硬",
+      "统计必须可复算",
+      "SM 的责任边界",
+    ]) {
+      assert.ok(guide.includes(lesson), `closure guide should preserve lesson: ${lesson}`);
+    }
+
+    const checklist = fs.readFileSync(closure, "utf8");
+    assert.ok(checklist.includes("时间盒"));
+    assert.ok(checklist.includes("Sprint Goal"));
+    assert.ok(checklist.includes("carry-over"));
+    assert.ok(checklist.includes("Sprint 1 准入"));
+
+    assert.equal(
+      fs.existsSync(path.join(sprintDir, "07_证据清单.json")),
+      false,
+      "lightweight template should not generate a mandatory evidence manifest",
+    );
+    assert.equal(
+      fs.existsSync(path.join(target, "tools", "verify-sprint-evidence.mjs")),
+      false,
+      "lightweight template should not generate a mandatory verifier",
     );
   } finally {
     fs.rmSync(sandbox, { recursive: true, force: true });

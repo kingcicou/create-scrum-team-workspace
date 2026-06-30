@@ -22,9 +22,11 @@ last-updated: {{CREATED_DATE}}
 | A05 | P0 | 团队输入输出总表（本目录） | `00_项目导航/06_团队输入输出总表/` | SM | 🟢 | {{CREATED_DATE}} | A04 | 全员 | - | - | 每日更新 | 0.4.0 起拆为分表 | V1.0 | 待评审 | PO |
 | A06 | P0 | SM 作战手册 | `00_项目导航/SM_作战手册_Sutherland.md` | SM | 🟢 | {{CREATED_DATE}} | A02, A04, A05 | 全员 | - | - | 待按真实节奏调整 | SM 每日操作入口 | V1.0 | 待评审 | PO, 全员 |
 | A07 | P0 | Sprint 0 流程监控台 | `03_迭代运行/Sprint-0-启动/01_Sprint流程监控台.md` | SM | 🟢 | {{CREATED_DATE}} | A05 | 全员 | PO, TL, FS | - | 初始阶段和角色行动已生成 | 每日校准，不复制事实源 | V1.0 | 待评审 | 全员 |
-| A08 | P1 | SM 教练查询与回复模板 | `00_项目导航/09_SM教练查询与回复模板.md` | SM | ✅ | {{CREATED_DATE}} | A07 | 全员 | - | {{CREATED_DATE}} | 生成器产出 | 先讲因果链和并行，再讲角色行动 | V1.0 | 待评审 | 全员 |
+| A08 | P1 | 团队协作交互协议与 SM 播报模板 | `00_项目导航/09_SM教练查询与回复模板.md` | SM | ✅ | {{CREATED_DATE}} | A07 | 全员 | - | {{CREATED_DATE}} | 生成器产出 | 状态包、确认纠偏、群聊快报、流程全景和角色状态卡 | V1.1 | 待评审 | 全员 |
 | A09 | P0 | 文档协作与并发控制规范 | `知识库/Scrum/13_文档协作与并发控制规范.md` | SM | ✅ | {{CREATED_DATE}} | A04 | 全员 | PO, TL, FS | {{CREATED_DATE}} | 0.4.0 引入 | 解决并发写入冲突 | V1.0 | 待评审 | 全员 |
 | A10 | P0 | CODEOWNERS 映射 | `.github/CODEOWNERS` | SM + FS | 🔵 | - | A03 | 全员 | - | - | 占位符待替换为真实账号 | 平台原生护栏 | V0.1 | 待评审 | FS |
+| A11 | P0 | Sprint关闭与证据治理规范 | `知识库/Scrum/14_Sprint关闭与证据治理规范.md` | SM | ✅ | {{CREATED_DATE}} | A09 | 全员 | PO, TL, FS | {{CREATED_DATE}} | 0.5.0引入 | 模板内置参考规范，无需项目重复审批 | V1.0 | 模板内置 | - |
+| A12 | P0 | Sprint 0关闭与Sprint 1准入检查表 | `03_迭代运行/Sprint-0-启动/07_Sprint关闭与准入检查表.md` | SM | 🟢 | {{CREATED_DATE}} | A07, A11 | 全员 | PO, TL, FS | - | 待Sprint结束时裁决 | open项必须处置后才能关闭治理闭环 | V0.1 | 待评审 | PO, TL, FS |
 
 ## 评审意见追加
 
