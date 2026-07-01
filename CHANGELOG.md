@@ -4,6 +4,14 @@
 
 版本号使用语义化版本（SemVer）：`MAJOR.MINOR.PATCH`。
 
+## [Unreleased]
+
+### Added
+
+### Changed
+
+### Fixed
+
 ## [0.9.0] - 2026-07-01
 
 ### Added
