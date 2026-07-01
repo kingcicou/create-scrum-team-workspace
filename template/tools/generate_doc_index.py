@@ -413,7 +413,69 @@ def stale_audit(docs):
         "- 任务表标 blocked 的项，`03_风险与障碍.md` 是否有对应登记？不一致 = 事实源矛盾。\n"
         "- 提交 author 是否本人/真实署名，未用统一账号代提？（Scrum/11 §8）\n"
     )
+
+    sa = signoff_audit()
+    if sa is not None:
+        cur, srows = sa
+        badc = sum(1 for r in srows if "✅" not in r[3])
+        parts.append(
+            f"\n## ✍️ 签核状态（现行手册基线 = V{str(cur).replace('V', '')}）\n\n"
+            f"{len(srows)} 名角色，**{badc}** 名未签或过期。\n\n"
+            "| 角色 | 成员 | 确认基线 | 状态 |\n|------|------|:--:|------|")
+        for role, member, ver, state in srows:
+            parts.append(f"| {role} | {member} | {ver} | {state} |")
+
     write("06_停滞审计.md", "文档索引 · 停滞与审计", "\n".join(parts) + "\n")
+
+
+def role_monitor(docs):
+    """按角色索引 + 顶部“角色监控视图”（每角色产出健康度）。"""
+    from collections import defaultdict
+    groups = defaultdict(list)
+    for d in docs:
+        groups[d.owner].append(d)
+    parts = [f"共 **{len(docs)}** 份文档，按 **角色** 分组。\n",
+             "\n## 角色监控视图（产出健康度）\n\n"
+             "| 角色 | 文档数 | approved | draft/review | 缺字段 |\n"
+             "|------|:--:|:--:|:--:|:--:|"]
+    for owner in sorted(groups):
+        items = groups[owner]
+        ap = sum(1 for d in items if d.status == "approved")
+        nt = sum(1 for d in items if d.status in ("draft", "review"))
+        gap = sum(1 for d in items if d.missing)
+        parts.append(f"| {owner} | {len(items)} | {ap} | {nt} | {gap} |")
+    for owner in sorted(groups):
+        items = sorted(groups[owner], key=lambda d: (d.sprint, d.id))
+        parts.append(f"\n## {owner}（{len(items)}）\n\n{TABLE_HEADER}")
+        parts.extend(row(d) for d in items)
+    write("01_索引_按角色.md", "文档索引 · 按角色", "\n".join(parts) + "\n")
+
+
+def signoff_audit():
+    """读 11_角色行动手册 §4 签核表，比对确认基线 vs 现行手册版本。返回 (cur, rows) 或 None。"""
+    charter = ROOT / "00_项目导航" / "11_角色行动手册.md"
+    if not charter.exists():
+        return None
+    text = charter.read_text(encoding="utf-8", errors="replace")
+    cur = str(parse_frontmatter(text).get("version", "?"))
+    norm = lambda v: str(v).replace("V", "").replace("v", "").strip()
+    roles = ("PO", "SM", "TL", "Mid.BE/QA", "Sr.FE/UX", "Mid.FE/QA", "FS/DevOps")
+    rows = []
+    for line in text.splitlines():
+        if not line.startswith("|"):
+            continue
+        cols = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cols) < 7 or cols[0] not in roles:
+            continue
+        role, member, ver = cols[0], cols[1], cols[5]
+        if ver in ("—", "", "-"):
+            state = "❌ 未签"
+        elif norm(ver) != norm(cur):
+            state = f"⚠️ 过期（签于 {ver}，现行 V{norm(cur)}）"
+        else:
+            state = "✅ 最新"
+        rows.append((role, member, ver, state))
+    return cur, rows
 
 
 def overview(docs):
@@ -469,7 +531,7 @@ def overview(docs):
 def main():
     docs = collect()
     overview(docs)
-    group_index(docs, lambda d: d.owner, [], "文档索引 · 按角色", "01_索引_按角色.md")
+    role_monitor(docs)
     group_index(docs, lambda d: d.sprint, [], "文档索引 · 按迭代", "02_索引_按迭代.md")
     group_index(docs, lambda d: d.domain, DOMAIN_ORDER, "文档索引 · 按领域", "03_索引_按领域.md")
     group_index(docs, lambda d: d.phase, PHASE_ORDER, "文档索引 · 按阶段", "04_索引_按阶段.md")
