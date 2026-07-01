@@ -99,10 +99,27 @@ git -C TeamWork/Evan_MidFE_QA log -1 --format="%an <%ae>"
 - [ ] 选择测试提交时，作者身份与对应角色一致。
 - [ ] 选择远端推送时，远端分支齐全且没有强制覆盖。
 
-## 8. 反模式
+## 8. 文档工作区的提交署名
+
+worktree 身份隔离解决的是**代码仓**的作者归属；**文档工作区**（`00_项目导航` ~ `07_度量改进`
+等直接提交到 `main` 的 Markdown）同样需要真实作者，否则 `git blame` 失去归属，
+覆盖/误改难以发现（真实事故见 `13_文档协作与并发控制规范.md` §8）。
+
+1. 文档产出由**本人提交**；若由 SM/scribe 代提，必须保留真实作者：
+
+   ```bash
+   git commit --author="<Name> <email>" -m "docs(<role>): ..."
+   ```
+
+2. commit message 前缀（如 `docs(evan):`）是补充，不替代 `--author`。
+3. **禁止统一账号代提**（与 §4 一致）：作者应与改动路径 owner（Frontmatter / CODEOWNERS）一致，不一致视为审计缺陷。
+4. 审计：`git log --format="%an <%ae> | %s"` 抽查作者与 owner 是否匹配。
+
+## 9. 反模式
 
 | 反模式 | 后果 | 修正 |
 | --- | --- | --- |
+| 文档全部由一个账号（如 SM）代提 | git blame 失去归属，覆盖难发现 | 本人提交或 `--author` 保留真实作者 |
 | 复制 5 份目录但不使用 Git | 来源和合并关系不可追溯 | 使用 worktree |
 | 用普通 local config 配多个 worktree | 最后一次配置覆盖所有角色 | 启用 `worktreeConfig` 和 `--worktree` |
 | 个人分支命名为 `sprint-n/...` | 与集成分支 `sprint-n` 冲突 | 改为 `feature/sprint-n/...` |
