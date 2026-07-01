@@ -26,3 +26,7 @@ scrum.config.json
 
 # æ—¥å¿—
 *.log
+
+# Python ×Ö½ÚÂë
+__pycache__/
+*.pyc
