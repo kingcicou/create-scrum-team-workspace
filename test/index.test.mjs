@@ -495,8 +495,8 @@ test("generates one Sprint task table with named owners and dependency flow", ()
       path.join(target, "知识库", "00_知识库总目录.md"),
       "utf8",
     );
-    assert.ok(knowledgeCatalog.includes("固定生成 `91` 个 Markdown 文件"));
-    assert.ok(knowledgeCatalog.includes("| 项目导航 | 17 |"));
+    assert.ok(knowledgeCatalog.includes("固定生成 `93` 个 Markdown 文件"));
+    assert.ok(knowledgeCatalog.includes("| 项目导航 | 18 |"));
     assert.ok(knowledgeCatalog.includes("### 可预见与不可预见"));
     assert.ok(knowledgeCatalog.includes("数量和内容不可预见"));
   } finally {
@@ -650,6 +650,83 @@ test("v0.5.0 generates lightweight Sprint closure guidance", () => {
       false,
       "lightweight template should not generate a mandatory verifier",
     );
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("v0.9.1 scopes governance debt and keeps onboarding non-blocking", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-091-"));
+  const target = path.join(sandbox, "project");
+  const python = process.env.PYTHON || "python";
+
+  try {
+    runCli([target, "--repo=governed-app", "--no-git", "--no-worktrees"]);
+
+    const home = fs.readFileSync(
+      path.join(target, "00_项目导航", "00_项目首页.md"),
+      "utf8",
+    );
+    const roleManual = fs.readFileSync(
+      path.join(target, "00_项目导航", "11_角色行动手册.md"),
+      "utf8",
+    );
+    const smallTeam = fs.readFileSync(
+      path.join(target, "知识库", "项目模板", "05_小团队角色裁剪指南.md"),
+      "utf8",
+    );
+    assert.ok(home.includes("08_团队开发协作SOP.md"));
+    assert.equal(home.includes("08_团队开发协作 SOP.md"), false);
+    assert.ok(roleManual.includes("签核不是 Sprint 开工门禁"));
+    assert.ok(roleManual.includes("governance: managed"));
+    assert.ok(roleManual.includes("resign-roles: []"));
+    assert.ok(smallTeam.includes("实验性手工方案"));
+    assert.ok(smallTeam.includes("--no-worktrees"));
+
+    const invalidDoc = path.join(target, "04_工程设计", "INVALID_受管文档.md");
+    fs.writeFileSync(
+      invalidDoc,
+      `---
+id: Z99
+title: 非法阶段验证
+owner: Fowler
+domain: BE
+phase: 错误阶段
+sprint: Sprint-0
+type: ADR
+status: draft
+version: V1.0
+last-updated: 2026-07-01
+governance: managed
+---
+
+# 非法阶段验证
+`,
+      "utf8",
+    );
+
+    execFileSync(python, [path.join(target, "tools", "generate_doc_index.py")], {
+      cwd: target,
+      encoding: "utf8",
+    });
+
+    const overview = fs.readFileSync(
+      path.join(target, "00_项目导航", "文档索引", "00_总览.md"),
+      "utf8",
+    );
+    const debt = fs.readFileSync(
+      path.join(target, "00_项目导航", "文档索引", "99_缺字段报告.md"),
+      "utf8",
+    );
+    const audit = fs.readFileSync(
+      path.join(target, "00_项目导航", "文档索引", "06_停滞审计.md"),
+      "utf8",
+    );
+    assert.ok(overview.includes("显式纳管"));
+    assert.ok(overview.includes("历史、入口、骨架和 exempt 文档不形成治理债"));
+    assert.ok(debt.includes("phase=错误阶段"));
+    assert.ok(audit.includes("未签仅作入队提示"));
+    assert.ok(audit.includes("未签（非开工门禁）"));
   } finally {
     fs.rmSync(sandbox, { recursive: true, force: true });
   }
