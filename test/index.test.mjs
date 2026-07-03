@@ -725,9 +725,9 @@ governance: managed
     assert.ok(overview.includes("显式纳管"));
     assert.ok(overview.includes("历史、入口、骨架和 exempt 文档不形成治理债"));
     assert.ok(debt.includes("phase=错误阶段"));
-    assert.ok(audit.includes("类型：**入队首签**"));
+    assert.ok(audit.includes("模式：**initial**"));
     assert.ok(audit.includes("应签范围：**PO、SM、TL、Mid.BE/QA、Sr.FE/UX、Mid.FE/QA、FS/DevOps**"));
-    assert.ok(audit.includes("待首签（非代码开工门禁）"));
+    assert.ok(audit.includes("待签：CHG-100"));
   } finally {
     fs.rmSync(sandbox, { recursive: true, force: true });
   }
@@ -835,23 +835,15 @@ test("v0.9.3 keeps signoff orchestration with SM and normalizes role scope", () 
     assert.ok(roleManual.includes("仅 SM 自签"));
     assert.ok(smPlaybook.includes("编排角色手册签核"));
 
-    roleManual = roleManual.replace("resign-roles: []", "resign-roles: [SM, FS]");
-    const roles = new Set([
-      "PO", "SM", "TL", "Mid.BE/QA", "Sr.FE/UX", "Mid.FE/QA", "FS/DevOps",
-    ]);
     roleManual = roleManual
-      .split(/\r?\n/)
-      .map((line) => {
-        if (!line.startsWith("|")) return line;
-        const cols = line.split("|");
-        const role = cols[1]?.trim();
-        if (!roles.has(role) || cols.length < 10) return line;
-        cols[6] = " V1.1 ";
-        cols[7] = " 2026-07-03 ";
-        cols[8] = ` ${role.toLowerCase().replaceAll("/", "-")}-commit `;
-        return cols.join("|");
-      })
-      .join("\n");
+      .replace(
+        /\| CHG-100 \| V1\.3 \| [^|]+ \| 首版；含关闭同步、变化触发式 CI、签核编排与事件模型 \| ALL \|/,
+        "| CHG-100 | V1.3 | 2026-07-03 | 别名匹配验证 | SM,FS |",
+      )
+      .replace(
+        /\| SIGN-INIT-001 \| initial \| V1\.3 \| CHG-100 \| ALL \| [^|]+ \| 由 SM 确认 \| open \| — \|/,
+        "| SIGN-ALIAS-001 | incremental | V1.3 | CHG-100 | SM,FS | 2026-07-03 | 2026-07-04 | open | — |",
+      );
     fs.writeFileSync(manualPath, roleManual, "utf8");
 
     execFileSync(python, [path.join(target, "tools", "generate_doc_index.py")], {
@@ -863,11 +855,11 @@ test("v0.9.3 keeps signoff orchestration with SM and normalizes role scope", () 
       "utf8",
     );
 
-    assert.ok(audit.includes("类型：**变更重签**"));
+    assert.ok(audit.includes("模式：**incremental**"));
     assert.ok(audit.includes("应签范围：**SM、FS/DevOps**"));
-    assert.match(audit, /\| SM \| .*⚠️ 过期/);
-    assert.match(audit, /\| FS\/DevOps \| .*⚠️ 过期/);
-    assert.match(audit, /\| Mid\.BE\/QA \| .*✅ 有效（未受本次变更影响）/);
+    assert.match(audit, /\| SM \| .*⚠️ 待签：CHG-100/);
+    assert.match(audit, /\| FS\/DevOps \| .*⚠️ 待签：CHG-100/);
+    assert.match(audit, /\| Mid\.BE\/QA \| .*○ 当前无受影响变更/);
     assert.ok(audit.includes("不得把汇总、通知或验收转交给被签核成员"));
   } finally {
     fs.rmSync(sandbox, { recursive: true, force: true });
@@ -920,6 +912,97 @@ test("v0.9.4 preserves Sprint lessons across knowledge, operations, and source t
     assert.ok(backflow.includes("完整回流 Definition of Done"));
     assert.ok(backflow.includes("只完成 L1 项目修复"));
     assert.ok(backflow.includes("项目闭环"));
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("v0.9.5 traces catch-up coverage and keeps rebaseline history honest", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-095-"));
+  const target = path.join(sandbox, "project");
+  const python = process.env.PYTHON || "python";
+
+  try {
+    runCli([target, "--repo=event-app", "--no-git", "--no-worktrees"]);
+
+    const nav = path.join(target, "00_项目导航");
+    const manualPath = path.join(nav, "11_角色行动手册.md");
+    let manual = fs.readFileSync(manualPath, "utf8");
+    manual = manual
+      .replace("version: 1.3", "version: 1.4")
+      .replace(
+        /\| CHG-100 \| V1\.3 \| [^|]+ \| 首版；含关闭同步、变化触发式 CI、签核编排与事件模型 \| ALL \|/,
+        `| CHG-100 | V1.0 | 2026-07-01 | 首版 | FS/DevOps |
+| CHG-120 | V1.2 | 2026-07-02 | CI 变化触发 | FS |
+| CHG-130 | V1.3 | 2026-07-02 | SM 编排 | SM |
+| CHG-140 | V1.4 | 2026-07-03 | CI 证据契约 | FS/DevOps |`,
+      )
+      .replace(
+        /\| SIGN-INIT-001 \| initial \| V1\.3 \| CHG-100 \| ALL \| [^|]+ \| 由 SM 确认 \| open \| — \|/,
+        "| SIGN-CATCHUP-001 | catch-up | V1.4 | CHG-120,CHG-140 | FS | 2026-07-03 | 2026-07-04 | open | — |",
+      )
+      .replace(
+        "|---|---|---|---|---|---|---|---|---|---|\n\n当前有效性",
+        `|---|---|---|---|---|---|---|---|---|---|
+| EVT-FS-001 | LEGACY | FS/DevOps | Atlas | — | V1.0 | CHG-100 | 2026-07-01 | unverified | accepted |
+| EVT-FS-002 | SIGN-CATCHUP-001 | FS | Atlas | V1.0 | V1.4 | CHG-120,CHG-140 | 2026-07-03 | auto | accepted |
+
+当前有效性`,
+      );
+    fs.writeFileSync(manualPath, manual, "utf8");
+
+    execFileSync("git", ["init", "-b", "main"], { cwd: target, stdio: "pipe" });
+    git(target, ["config", "user.name", "Test SM"]);
+    git(target, ["config", "user.email", "sm@example.test"]);
+    git(target, ["add", "."]);
+    git(target, ["commit", "-m", "test: add catch-up signoff events"]);
+
+    execFileSync(python, [path.join(target, "tools", "generate_doc_index.py")], {
+      cwd: target,
+      encoding: "utf8",
+    });
+    let audit = fs.readFileSync(
+      path.join(nav, "文档索引", "06_停滞审计.md"),
+      "utf8",
+    );
+    assert.ok(audit.includes("批次：**SIGN-CATCHUP-001**"));
+    assert.ok(audit.includes("模式：**catch-up**"));
+    assert.match(audit, /\| FS\/DevOps \| .*V1\.4.*✅ 当前有效；⚠️ 历史证据缺口/);
+    assert.ok(audit.includes("EVT-FS-002"));
+    assert.ok(audit.includes("CHG-120,CHG-140"));
+    assert.equal(audit.includes("FS/DevOps | Atlas | V1.2"), false);
+    assert.match(audit, /\| SM \| .*⚠️ 待签：CHG-130/);
+
+    manual = fs.readFileSync(manualPath, "utf8")
+      .replace("version: 1.4", "version: 1.5")
+      .replace(
+        "| CHG-140 | V1.4 | 2026-07-03 | CI 证据契约 | FS/DevOps |",
+        `| CHG-140 | V1.4 | 2026-07-03 | CI 证据契约 | FS/DevOps |
+| CHG-150 | V1.5 | 2026-07-03 | 事件模型迁移 | ALL |`,
+      )
+      .replace(
+        "| SIGN-CATCHUP-001 | catch-up | V1.4 | CHG-120,CHG-140 | FS | 2026-07-03 | 2026-07-04 | open | — |",
+        `| SIGN-CATCHUP-001 | catch-up | V1.4 | CHG-120,CHG-140 | FS | 2026-07-03 | 2026-07-04 | closed | EVT-FS-002 |
+| SIGN-RESET-001 | full-rebaseline | V1.5 | BASELINE-V1.5 | ALL | 2026-07-03 | 2026-07-04 | open | — |`,
+      )
+      .replace(
+        "| EVT-FS-002 | SIGN-CATCHUP-001 | FS | Atlas | V1.0 | V1.4 | CHG-120,CHG-140 | 2026-07-03 | auto | accepted |",
+        `| EVT-FS-002 | SIGN-CATCHUP-001 | FS | Atlas | V1.0 | V1.4 | CHG-120,CHG-140 | 2026-07-03 | auto | accepted |
+| EVT-FS-003 | SIGN-RESET-001 | FS/DevOps | Atlas | V1.4 | V1.5 | BASELINE-V1.5 | 2026-07-03 | auto | accepted |`,
+      );
+    fs.writeFileSync(manualPath, manual, "utf8");
+    git(target, ["add", path.relative(target, manualPath)]);
+    git(target, ["commit", "-m", "test: add full rebaseline event"]);
+
+    execFileSync(python, [path.join(target, "tools", "generate_doc_index.py")], {
+      cwd: target,
+      encoding: "utf8",
+    });
+    audit = fs.readFileSync(path.join(nav, "文档索引", "06_停滞审计.md"), "utf8");
+    assert.ok(audit.includes("批次：**SIGN-RESET-001**"));
+    assert.match(audit, /\| FS\/DevOps \| .*V1\.5.*✅ 当前有效；⚠️ 历史证据缺口/);
+    assert.match(audit, /\| PO \| .*⚠️ 待签：CHG-150/);
+    assert.ok(audit.includes("恢复当前有效性但保留旧历史缺口"));
   } finally {
     fs.rmSync(sandbox, { recursive: true, force: true });
   }

@@ -28,6 +28,7 @@ from __future__ import annotations
 import datetime
 import json
 import re
+import subprocess
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -438,26 +439,40 @@ def stale_audit(docs):
 
     sa = signoff_audit()
     if sa is not None:
-        cur, srows, mode, scope = sa
-        badc = sum(1 for r in srows if "⚠️" in r[3])
+        cur = sa["current"]
+        srows = sa["rows"]
+        mode = sa["mode"]
+        scope = sa["scope"]
+        badc = sum(1 for r in srows if r[3].startswith(("⚠️", "🟡")))
         scope_text = "、".join(scope) if scope else "无"
-        if mode == "入队首签":
-            next_action = "SM 建立首签任务卡并按 09 §10.1 通知全员；完成后核验本人行和提交身份。"
+        if mode == "initial":
+            next_action = "SM 按 09 §10.1 发起首签；成员在事件台账追加本人 Event ID。"
+        elif mode == "full-rebaseline":
+            next_action = "SM 按 09 §10.6 发起全量重基线；恢复当前有效性但保留旧历史缺口。"
         elif scope == ["SM"]:
-            next_action = "仅涉及 SM：SM 直接自查、更新本人行、重跑审计并发布闭环通知，不派给他人。"
+            next_action = "仅涉及 SM：SM 直接追加本人事件、重跑审计并发布闭环通知。"
         elif scope:
-            next_action = "SM 按 09 §10.2 逐人通知范围内成员；不得把汇总、通知或验收转交给被签核成员。"
+            next_action = "SM 按批次逐人通知；不得把汇总、通知或验收转交给被签核成员。"
         else:
-            next_action = "当前无活动签核；仅在新成员入队或职责/边界/IO 实质变化时重新建立范围。"
+            next_action = "当前无活动批次；仅在入队或职责/边界/IO 实质变化时建立新批次。"
         parts.append(
             f"\n## ✍️ 签核状态（现行手册基线 = V{str(cur).replace('V', '')}）\n\n"
-            f"- 类型：**{mode}**\n"
+            f"- 批次：**{sa['campaign']}**\n"
+            f"- 模式：**{mode}**\n"
             f"- 应签范围：**{scope_text}**\n"
             f"- 待处理：**{badc}** 名\n"
             f"- SM 下一动作：{next_action}\n\n"
-            "| 角色 | 成员 | 确认基线 | 状态 |\n|------|------|:--:|------|")
+            "| 角色 | 成员 | 最新目标基线 | 状态 |\n|------|------|:--:|------|")
         for role, member, ver, state in srows:
             parts.append(f"| {role} | {member} | {ver} | {state} |")
+        parts.append(
+            "\n### 签核事件证据\n\n"
+            "| Event ID | 角色 | 目标 | 覆盖 | Git/迁移证据 | 结果 |\n"
+            "|---|---|:--:|---|---|---|")
+        if not sa["events"]:
+            parts.append("| — | — | — | — | — | 暂无事件 |")
+        for event in sa["events"]:
+            parts.append("| " + " | ".join(event) + " |")
 
     write("06_停滞审计.md", "文档索引 · 停滞与审计", "\n".join(parts) + "\n")
 
@@ -485,14 +500,67 @@ def role_monitor(docs):
     write("01_索引_按角色.md", "文档索引 · 按角色", "\n".join(parts) + "\n")
 
 
+def _table_rows(text, first_header):
+    """按首列标题读取 Markdown 表；返回表头到值的字典列表。"""
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if not line.startswith("|"):
+            continue
+        headers = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if not headers or headers[0] != first_header:
+            continue
+        rows = []
+        for row_line in lines[index + 2:]:
+            if not row_line.startswith("|"):
+                break
+            values = [cell.strip() for cell in row_line.strip().strip("|").split("|")]
+            if len(values) != len(headers):
+                continue
+            rows.append(dict(zip(headers, values)))
+        return rows
+    return []
+
+
+def _version_key(value):
+    nums = re.findall(r"\d+", str(value))
+    return tuple(int(n) for n in nums) if nums else (0,)
+
+
+def _split_values(value):
+    return [item.strip() for item in re.split(r"[,，;；、]", str(value)) if item.strip()]
+
+
+def _git_event_evidence(event_id, method):
+    """验证 legacy commit，或通过 Event ID 反查引入事件的 Git 提交。"""
+    if method.startswith("legacy:"):
+        ref = method.split(":", 1)[1].strip()
+        check = subprocess.run(
+            ["git", "-C", str(ROOT), "cat-file", "-e", f"{ref}^{{commit}}"],
+            capture_output=True, text=True, check=False,
+        )
+        return f"✅ {ref}" if check.returncode == 0 else f"⚠️ 无效 legacy:{ref}"
+    if method == "auto":
+        found = subprocess.run(
+            [
+                "git", "-C", str(ROOT), "log", "--all", "-1",
+                "--format=%h · %an · %aI", "-S", event_id, "--",
+                "00_项目导航/11_角色行动手册.md",
+            ],
+            capture_output=True, text=True, check=False,
+        )
+        return f"✅ {found.stdout.strip()}" if found.stdout.strip() else "🟡 待 Git 提交"
+    return "🟡 历史不可验证" if method == "unverified" else f"🟡 {method or '未指定'}"
+
+
 def signoff_audit():
-    """读 11_角色行动手册 §4 签核表，比对确认基线 vs 现行手册版本。返回 (cur, rows) 或 None。"""
+    """从变更、批次和追加式事件计算当前签核状态；兼容 v0.9.4 以前的快照表。"""
     charter = ROOT / "00_项目导航" / "11_角色行动手册.md"
     if not charter.exists():
         return None
     text = charter.read_text(encoding="utf-8", errors="replace")
     fm = parse_frontmatter(text)
     cur = str(fm.get("version", "?"))
+    roles = ("PO", "SM", "TL", "Mid.BE/QA", "Sr.FE/UX", "Mid.FE/QA", "FS/DevOps")
     aliases = {
         "PO/PM": "PO",
         "TL/Sr.BE": "TL",
@@ -502,9 +570,109 @@ def signoff_audit():
         "FS": "FS/DevOps",
     }
     canonical = lambda role: aliases.get(str(role).strip(), str(role).strip())
+    role_ids = {
+        "PO": ("po", "PO"), "SM": ("sm", "SM"), "TL": ("tl", "TL"),
+        "Mid.BE/QA": ("midbe", "Mid.BE"), "Sr.FE/UX": ("srfe", "Sr.FE"),
+        "Mid.FE/QA": ("midfe", "Mid.FE"), "FS/DevOps": ("fs", "FS"),
+    }
+    members = {}
+    for role, keys in role_ids.items():
+        members[role] = next((ROLE_TO_PERSON[k] for k in keys if k in ROLE_TO_PERSON), "—")
+
+    changes = _table_rows(text, "Change ID")
+    campaigns = _table_rows(text, "Campaign ID")
+    event_rows = _table_rows(text, "Event ID")
+    if changes or event_rows or str(fm.get("signoff-model", "")).startswith("events"):
+        change_map = {}
+        for change in changes:
+            affected = {canonical(role) for role in _split_values(change.get("影响角色", ""))}
+            if "ALL" in affected:
+                affected = set(roles)
+            change_map[change["Change ID"]] = {
+                "version": change.get("手册基线", "?"),
+                "affected": affected,
+            }
+
+        active = [
+            campaign for campaign in campaigns
+            if campaign.get("状态", "").lower() in ("open", "active", "进行中")
+        ]
+        active.sort(key=lambda item: _version_key(item.get("目标基线", "")), reverse=True)
+        campaign = active[0] if active else None
+        scope = []
+        if campaign:
+            raw_scope = {canonical(role) for role in _split_values(campaign.get("应签角色", ""))}
+            scope = list(roles) if "ALL" in raw_scope else [role for role in roles if role in raw_scope]
+
+        accepted = []
+        rendered_events = []
+        for event in event_rows:
+            role = canonical(event.get("角色", ""))
+            result = event.get("结果/备注", "")
+            evidence = _git_event_evidence(
+                event.get("Event ID", ""),
+                event.get("证据方式", ""),
+            )
+            rendered_events.append((
+                event.get("Event ID", "—"),
+                role or "—",
+                event.get("目标基线", "—"),
+                event.get("覆盖 Change ID", "—"),
+                evidence,
+                result or "—",
+            ))
+            if result.lower().startswith("accepted"):
+                accepted.append((event, role, evidence))
+
+        state_rows = []
+        for role in roles:
+            relevant_changes = {
+                change_id for change_id, meta in change_map.items()
+                if role in meta["affected"] and _version_key(meta["version"]) <= _version_key(cur)
+            }
+            covered = set()
+            role_events = []
+            for event, event_role, evidence in accepted:
+                if event_role != role:
+                    continue
+                role_events.append((event, evidence))
+                coverage = set(_split_values(event.get("覆盖 Change ID", "")))
+                target = event.get("目标基线", "")
+                if any(item.startswith("BASELINE-") for item in coverage):
+                    covered.update(
+                        change_id for change_id, meta in change_map.items()
+                        if role in meta["affected"]
+                        and _version_key(meta["version"]) <= _version_key(target)
+                    )
+                else:
+                    covered.update(coverage)
+            pending = sorted(relevant_changes - covered)
+            role_events.sort(key=lambda item: _version_key(item[0].get("目标基线", "")))
+            latest = role_events[-1][0].get("目标基线", "—") if role_events else "—"
+            latest_evidence_ok = bool(role_events) and role_events[-1][1].startswith("✅")
+            history_gap = any(not evidence.startswith("✅") for _, evidence in role_events[:-1])
+            if not relevant_changes:
+                state = "○ 当前无受影响变更"
+            elif pending:
+                state = "⚠️ 待签：" + ",".join(pending)
+            elif not latest_evidence_ok:
+                state = "🟡 覆盖完整，证据待验证"
+            else:
+                state = "✅ 当前有效" + ("；⚠️ 历史证据缺口" if history_gap else "")
+            state_rows.append((role, members[role], latest, state))
+
+        return {
+            "current": cur,
+            "rows": state_rows,
+            "mode": campaign.get("模式", "无活动批次") if campaign else "无活动批次",
+            "scope": scope,
+            "campaign": campaign.get("Campaign ID", "无") if campaign else "无",
+            "events": rendered_events,
+        }
+
+    # v0.9.4 及更早版本：从“每角色最新基线”快照读取。
     affected = {canonical(role) for role in fm.get("resign-roles", [])}
     norm = lambda v: str(v).replace("V", "").replace("v", "").strip()
-    roles = ("PO", "SM", "TL", "Mid.BE/QA", "Sr.FE/UX", "Mid.FE/QA", "FS/DevOps")
     parsed = []
     for line in text.splitlines():
         if not line.startswith("|"):
@@ -532,7 +700,10 @@ def signoff_audit():
             state = "✅ 最新"
         rows.append((role, member, ver, state))
     scope = [role for role in roles if role in required]
-    return cur, rows, mode, scope
+    return {
+        "current": cur, "rows": rows, "mode": mode, "scope": scope,
+        "campaign": "legacy-snapshot", "events": [],
+    }
 
 
 def overview(docs):

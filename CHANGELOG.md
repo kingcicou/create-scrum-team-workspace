@@ -12,6 +12,26 @@
 
 ### Fixed
 
+## [0.9.5] - 2026-07-03
+
+### Added
+
+- 角色签核升级为 Change/Campaign/Event 追加式模型，支持 initial、
+  incremental、catch-up 和 full-rebaseline。
+- 签核审计按角色计算未覆盖 Change ID，并从稳定 Event ID 自动反查 Git
+  commit、作者和时间。
+- SM 通知增加 Campaign、覆盖范围、成员事件回复和全量重基线模板。
+
+### Changed
+
+- 当前有效性与历史完整性分开报告；全量重基线不再抹平旧证据缺口。
+- 小团队多帽签核改为按帽子追加事件，不再维护每帽子的最新快照行。
+
+### Fixed
+
+- 修复只保存最新基线导致 V1.2/V1.4 补签历程不可追溯的问题。
+- 移除签核行自填自身 commit 的自引用设计，避免误填代码仓 hash。
+
 ## [0.9.4] - 2026-07-03
 
 ### Added
