@@ -530,8 +530,8 @@ def _split_values(value):
     return [item.strip() for item in re.split(r"[,，;；、]", str(value)) if item.strip()]
 
 
-def _git_event_evidence(event_id, method):
-    """验证 legacy commit，或通过 Event ID 反查引入事件的 Git 提交。"""
+def _git_event_evidence(event_id, method, member=""):
+    """验证 legacy commit，或用 blame 定位 Event ID 当前行的真实作者。"""
     if method.startswith("legacy:"):
         ref = method.split(":", 1)[1].strip()
         check = subprocess.run(
@@ -540,15 +540,38 @@ def _git_event_evidence(event_id, method):
         )
         return f"✅ {ref}" if check.returncode == 0 else f"⚠️ 无效 legacy:{ref}"
     if method == "auto":
-        found = subprocess.run(
+        # 用 blame 定位签核行的当前作者，而非 pickaxe -S 的首现提交：
+        # 后者会把预先脚手架铺好的空行归因给铺行者，无法反映真实签核人，
+        # 也无法发现代提。blame 取当前行作者才是真实署名。
+        blame = subprocess.run(
             [
-                "git", "-C", str(ROOT), "log", "--all", "-1",
-                "--format=%h · %an · %aI", "-S", event_id, "--",
+                "git", "-C", str(ROOT), "blame", "--line-porcelain",
+                "-L", f"/{event_id}/,+1", "HEAD", "--",
                 "00_项目导航/11_角色行动手册.md",
             ],
-            capture_output=True, text=True, check=False,
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            check=False,
         )
-        return f"✅ {found.stdout.strip()}" if found.stdout.strip() else "🟡 待 Git 提交"
+        lines = (blame.stdout or "").splitlines()
+        if blame.returncode != 0 or not lines:
+            return "🟡 待 Git 提交"
+        commit = lines[0].split()[0][:9]
+        author = ""
+        adate = ""
+        for ln in lines:
+            if ln.startswith("author "):
+                author = ln[len("author "):].strip()
+            elif ln.startswith("author-time "):
+                try:
+                    adate = datetime.datetime.fromtimestamp(
+                        int(ln.split()[1])
+                    ).strftime("%Y-%m-%d")
+                except (ValueError, IndexError):
+                    adate = ""
+        tail = f"{commit} · {author}" + (f" · {adate}" if adate else "")
+        if member and member not in ("—", "") and author and author != member:
+            return f"⚠️ 疑似代签：{tail}（应为 {member}）"
+        return f"✅ {tail}"
     return "🟡 历史不可验证" if method == "unverified" else f"🟡 {method or '未指定'}"
 
 
@@ -612,6 +635,7 @@ def signoff_audit():
             evidence = _git_event_evidence(
                 event.get("Event ID", ""),
                 event.get("证据方式", ""),
+                event.get("成员", ""),
             )
             rendered_events.append((
                 event.get("Event ID", "—"),
@@ -649,12 +673,15 @@ def signoff_audit():
             pending = sorted(relevant_changes - covered)
             role_events.sort(key=lambda item: _version_key(item[0].get("目标基线", "")))
             latest = role_events[-1][0].get("目标基线", "—") if role_events else "—"
-            latest_evidence_ok = bool(role_events) and role_events[-1][1].startswith("✅")
+            latest_evidence = role_events[-1][1] if role_events else ""
+            latest_evidence_ok = latest_evidence.startswith("✅")
             history_gap = any(not evidence.startswith("✅") for _, evidence in role_events[:-1])
             if not relevant_changes:
                 state = "○ 当前无受影响变更"
             elif pending:
                 state = "⚠️ 待签：" + ",".join(pending)
+            elif latest_evidence.startswith("⚠️"):
+                state = "⚠️ 证据异常（疑似代签/无效），需本人重签"
             elif not latest_evidence_ok:
                 state = "🟡 覆盖完整，证据待验证"
             else:

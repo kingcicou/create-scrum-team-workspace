@@ -952,8 +952,8 @@ test("v0.9.5 traces catch-up coverage and keeps rebaseline history honest", () =
     fs.writeFileSync(manualPath, manual, "utf8");
 
     execFileSync("git", ["init", "-b", "main"], { cwd: target, stdio: "pipe" });
-    git(target, ["config", "user.name", "Test SM"]);
-    git(target, ["config", "user.email", "sm@example.test"]);
+    git(target, ["config", "user.name", "Atlas"]);
+    git(target, ["config", "user.email", "atlas@example.test"]);
     git(target, ["add", "."]);
     git(target, ["commit", "-m", "test: add catch-up signoff events"]);
 
