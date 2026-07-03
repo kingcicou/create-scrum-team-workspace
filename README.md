@@ -11,19 +11,19 @@
 ### 方式一：Bash 一键执行（macOS / Linux / WSL / Git Bash）
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.9.1/create.sh) my-project
+bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.9.2/create.sh) my-project
 ```
 
 可叠加任意 CLI 选项：
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.9.1/create.sh) my-project --type=new --preset=tech
+bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.9.2/create.sh) my-project --type=new --preset=tech
 ```
 
 ### 方式二：PowerShell 一键执行（Windows）
 
 ```powershell
-irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.9.1/create.ps1 | iex
+irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.9.2/create.ps1 | iex
 ```
 
 执行后会进入交互式创建。也可提前设环境变量传项目名与额外参数：
@@ -31,20 +31,20 @@ irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.9
 ```powershell
 $env:PROJECT_NAME="my-project"
 $env:SCRUM_TEMPLATE_ARGS="--type=new --preset=tech"
-irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.9.1/create.ps1 | iex
+irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.9.2/create.ps1 | iex
 ```
 
 ### 方式三：npx（全平台，需 Node.js >= 18）
 
 ```bash
 # 直接从 GitHub 执行（推荐，与参考仓库一致）
-npx -y github:kingcicou/create-scrum-team-workspace#v0.9.1 my-project
+npx -y github:kingcicou/create-scrum-team-workspace#v0.9.2 my-project
 
 # 仅预览不写盘
-npx -y github:kingcicou/create-scrum-team-workspace#v0.9.1 my-project --dry-run
+npx -y github:kingcicou/create-scrum-team-workspace#v0.9.2 my-project --dry-run
 
 # 交互式
-npx -y github:kingcicou/create-scrum-team-workspace#v0.9.1 --interactive
+npx -y github:kingcicou/create-scrum-team-workspace#v0.9.2 --interactive
 ```
 
 > 未发布到 npm registry，请使用 `github:` 前缀。
@@ -74,11 +74,15 @@ node index.mjs my-project --type=new --preset=tech
 - 自动生成 Sprint 任务与流程监控台，展示父项、任务级别、复杂度、Owner、依赖、证据和门禁。
 - 自动生成依赖时间线、并行泳道和汇合门，并提供成员状态包、SM 确认与状态纠偏闭环。
 - SM/教练可直接生成适合群聊转发的快报、Sprint 流程全景和单角色状态卡。
+- SM 查询入口提供“问题→模板”选择和真实示例；`review-status.mjs` 跨平台检查
+  Review/Retro 追加名单与重复标题。
 - **显式文档治理**：普通任务只更新 Sprint 任务表；长期正式产物标记
   `governance: managed`，历史/入口/骨架不追溯清债；高冲突时才升级 PR/CODEOWNERS。
 - **小团队说明**：2-4 人帽子合并目前是实验性手工方案，建议生成时使用
   `--no-worktrees`，由 FS 按实际成员建工作区；CLI 暂未自动支持一人多帽。
 - **Sprint关闭经验（v0.5.0）**：提炼QFD_Ark外部评审六条教训，分离时间盒、Goal、遗留处置和下一轮准入，并生成轻量关闭检查表；详见`知识库/Scrum/14_Sprint关闭与证据治理规范.md`。
+- **Sprint关闭收口（v0.9.2）**：区分计划周期、工作完成和正式关闭；关闭时
+  切换首页/日历/角色入口，以单一事实源归档，并采用平台无关的 CI 最小证据。
 - **分级任务执行（v0.7.0）**：高阶角色负责目标、模块拆分、复杂度和 Review；普通执行任务默认只维护状态与证据。
 - 项目首页提供 30 分钟上手路径；成员按当前 Task 和角色查阅知识，不要求通读知识库。
 - 按仓库策略生成代码骨架、仓库清单和 `TeamWork/` 协同工作区规范。

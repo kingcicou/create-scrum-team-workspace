@@ -6,6 +6,9 @@
 
 | 维度 | 结论 | 证据/说明 |
 | --- | --- | --- |
+| 计划周期 | YYYY-MM-DD ~ YYYY-MM-DD | Planning 时锁定，不回写 |
+| 工作完成 | YYYY-MM-DD HH:mm / 未完成 | Goal 所需工作达到约定结果 |
+| 正式关闭 | YYYY-MM-DD HH:mm / 未关闭 | Review、Retro、遗留和事实同步完成 |
 | 时间盒 | open / closed |  |
 | Sprint Goal | achieved / partial / missed |  |
 | 遗留处置 | open / closed |  |
@@ -32,6 +35,8 @@
 - [ ] 测试、CI和部署结论来自实际运行。
 - [ ] 总结数字可从ID或路径明细复算。
 - [ ] 改进项已进入台账，没有提前记成已交付。
+- [ ] 项目首页、迭代日历和角色工作入口已切换。
+- [ ] 正式 Sprint 文档已锁定，归档只保留一个正文事实源。
 
 ## 5. 关闭确认
 
@@ -40,8 +45,8 @@
 - [ ] TL确认技术与质量门禁。
 - [ ] FS确认CI、集成与交付门禁。
 - [ ] SM确认遗留有去向、事实源无冲突。
+- [ ] SM确认首页显示“已关闭 / 下一 Sprint 待 Planning”或新的执行 Sprint。
 
 **最终结论：** 待确认
 
 > 需要tag时使用annotated tag，并在消息中写明Goal、门禁和遗留。tag不等于全部Done或release。
-

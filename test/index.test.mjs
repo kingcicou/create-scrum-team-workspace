@@ -731,3 +731,77 @@ governance: managed
     fs.rmSync(sandbox, { recursive: true, force: true });
   }
 });
+
+test("v0.9.2 generates actionable closure and review integrity guidance", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-092-"));
+  const target = path.join(sandbox, "project");
+
+  try {
+    runCli([target, "--repo=closure-app", "--no-git", "--no-worktrees"]);
+
+    const nav = path.join(target, "00_项目导航");
+    const smGuide = fs.readFileSync(
+      path.join(nav, "09_SM教练查询与回复模板.md"),
+      "utf8",
+    );
+    const roleManual = fs.readFileSync(
+      path.join(nav, "11_角色行动手册.md"),
+      "utf8",
+    );
+    const closure = fs.readFileSync(
+      path.join(target, "03_迭代运行", "Sprint-0-启动", "07_Sprint关闭与准入检查表.md"),
+      "utf8",
+    );
+    const closureGuide = fs.readFileSync(
+      path.join(target, "知识库", "Scrum", "14_Sprint关闭与证据治理规范.md"),
+      "utf8",
+    );
+
+    assert.ok(smGuide.includes("先查什么、选哪个模板"));
+    assert.ok(smGuide.includes("Review/Retro 评审完整性检查"));
+    assert.ok(roleManual.includes("稳定流水线只做触发验证"));
+    assert.ok(roleManual.includes("Sprint 关闭事实同步"));
+    assert.ok(closure.includes("工作完成"));
+    assert.ok(closure.includes("正式关闭"));
+    assert.ok(closureGuide.includes("平台无关的 CI 最小证据"));
+    assert.ok(closureGuide.includes("单一事实源归档"));
+
+    const review = path.join(target, "review.md");
+    fs.writeFileSync(
+      review,
+      `# Review
+
+## 评审意见追加
+
+### Alice (TL) · 2026-07-03
+
+通过。
+
+### Bob (FS) · 2026-07-03
+
+通过。
+`,
+      "utf8",
+    );
+
+    const tool = path.join(target, "tools", "review-status.mjs");
+    const output = execFileSync(process.execPath, [tool, review], {
+      cwd: target,
+      encoding: "utf8",
+    });
+    assert.ok(output.includes("Review entries (2)"));
+    assert.ok(output.includes("Alice (TL)"));
+    assert.ok(output.includes("Bob (FS)"));
+
+    fs.appendFileSync(review, "\n### Alice (TL) · 2026-07-04\n", "utf8");
+    assert.throws(
+      () => execFileSync(process.execPath, [tool, review], {
+        cwd: target,
+        stdio: "pipe",
+      }),
+      (error) => error.status === 2,
+    );
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});
