@@ -1007,3 +1007,96 @@ test("v0.9.5 traces catch-up coverage and keeps rebaseline history honest", () =
     fs.rmSync(sandbox, { recursive: true, force: true });
   }
 });
+
+test("v0.9.6 detects cosigning and excludes anomalous coverage from verified", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-096-"));
+  const target = path.join(sandbox, "project");
+  const python = process.env.PYTHON || "python";
+
+  const runGen = () =>
+    execFileSync(python, [path.join(target, "tools", "generate_doc_index.py")], {
+      cwd: target,
+      encoding: "utf8",
+    });
+  const readAudit = () =>
+    fs.readFileSync(
+      path.join(target, "00_项目导航", "文档索引", "06_停滞审计.md"),
+      "utf8",
+    );
+  const fsStateLine = (audit) =>
+    audit.split(/\r?\n/).find((line) => /^\| FS\/DevOps \|/.test(line)) || "";
+
+  try {
+    runCli([target, "--repo=event-app", "--no-git", "--no-worktrees"]);
+
+    const nav = path.join(target, "00_项目导航");
+    const manualPath = path.join(nav, "11_角色行动手册.md");
+    let manual = fs.readFileSync(manualPath, "utf8");
+    manual = manual
+      .replace("version: 1.3", "version: 1.5")
+      .replace(
+        /\| CHG-100 \| V1\.3 \| [^|]+ \| 首版；含关闭同步、变化触发式 CI、签核编排与事件模型 \| ALL \|/,
+        `| CHG-100 | V1.0 | 2026-07-01 | 首版 | FS/DevOps |
+| CHG-200 | V1.2 | 2026-07-02 | CI 变化触发 | FS/DevOps |`,
+      )
+      .replace(
+        /\| SIGN-INIT-001 \| initial \| V1\.3 \| CHG-100 \| ALL \| [^|]+ \| 由 SM 确认 \| open \| — \|/,
+        "| SIGN-096-001 | incremental | V1.5 | CHG-100,CHG-200 | FS | 2026-07-03 | 2026-07-04 | open | — |",
+      )
+      .replace(
+        "|---|---|---|---|---|---|---|---|---|---|\n\n当前有效性",
+        `|---|---|---|---|---|---|---|---|---|---|
+| EVT-FS-001 | SIGN-096-001 | FS/DevOps | Atlas | V1.0 | V1.0 | CHG-100 | 2026-07-03 | auto | accepted |
+
+当前有效性`,
+      );
+    fs.writeFileSync(manualPath, manual, "utf8");
+
+    execFileSync("git", ["init", "-b", "main"], { cwd: target, stdio: "pipe" });
+    git(target, ["config", "user.name", "Atlas"]);
+    git(target, ["config", "user.email", "atlas@example.test"]);
+    git(target, ["add", "."]);
+    // 代签场景：EVT-FS-001 那一行由 Mallory 提交（作者≠成员 Atlas）
+    git(target, [
+      "commit",
+      "--author=Mallory <mallory@example.test>",
+      "-m",
+      "cosign: FS row actually filled by Mallory",
+    ]);
+
+    // 场景 1：作者不匹配 → ⚠️ 疑似代签
+    runGen();
+    let audit = readAudit();
+    assert.match(audit, /EVT-FS-001 \|.*⚠️ 疑似代签.*应为 Atlas/);
+    // 场景 2：异常事件覆盖的 CHG-100 不进入 verified，必须显示待重签（回归 P1 有效覆盖漏洞）
+    assert.match(fsStateLine(audit), /待重签（疑似代签\/无效）：.*CHG-100/);
+    assert.doesNotMatch(fsStateLine(audit), /^\| FS\/DevOps \|.*✅ 当前有效/);
+
+    // 场景 3：未提交的事件行 → blame 在 HEAD 找不到 → 🟡 待 Git 提交
+    manual = fs.readFileSync(manualPath, "utf8").replace(
+      "| EVT-FS-001 | SIGN-096-001 | FS/DevOps | Atlas | V1.0 | V1.0 | CHG-100 | 2026-07-03 | auto | accepted |",
+      `| EVT-FS-001 | SIGN-096-001 | FS/DevOps | Atlas | V1.0 | V1.0 | CHG-100 | 2026-07-03 | auto | accepted |
+| EVT-FS-002 | SIGN-096-001 | FS/DevOps | Atlas | V1.0 | V1.2 | CHG-200 | 2026-07-03 | auto | accepted |`,
+    );
+    fs.writeFileSync(manualPath, manual, "utf8");
+    runGen();
+    audit = readAudit();
+    assert.match(audit, /EVT-FS-002 \|.*🟡 待 Git 提交/);
+
+    // 场景 4：本人（Atlas）提交补签 CHG-100 与 CHG-200 → 从待重签转为当前有效
+    manual = fs.readFileSync(manualPath, "utf8").replace(
+      "| EVT-FS-002 | SIGN-096-001 | FS/DevOps | Atlas | V1.0 | V1.2 | CHG-200 | 2026-07-03 | auto | accepted |",
+      `| EVT-FS-002 | SIGN-096-001 | FS/DevOps | Atlas | V1.0 | V1.2 | CHG-200 | 2026-07-03 | auto | accepted |
+| EVT-FS-003 | SIGN-096-001 | FS/DevOps | Atlas | V1.0 | V1.0 | CHG-100 | 2026-07-03 | auto | accepted |`,
+    );
+    fs.writeFileSync(manualPath, manual, "utf8");
+    git(target, ["add", "."]);
+    git(target, ["commit", "-m", "resign: Atlas re-signs CHG-100 and CHG-200"]);
+    runGen();
+    audit = readAudit();
+    assert.match(fsStateLine(audit), /✅ 当前有效/);
+    assert.doesNotMatch(fsStateLine(audit), /待重签/);
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});

@@ -654,7 +654,11 @@ def signoff_audit():
                 change_id for change_id, meta in change_map.items()
                 if role in meta["affected"] and _version_key(meta["version"]) <= _version_key(cur)
             }
-            covered = set()
+            # 只排除 ⚠️（疑似代签/无效 legacy）证据：它们覆盖的 CHG 不计数，
+            # 必须继续显示待重签，避免“旧代签占位 + 新本人补签”伪装成完整覆盖。
+            # 🟡（unverified 历史/待提交）沿用 v0.9.5 语义：计入覆盖但另标历史缺口。
+            verified_covered = set()
+            anomalous_covered = set()
             role_events = []
             for event, event_role, evidence in accepted:
                 if event_role != role:
@@ -663,14 +667,19 @@ def signoff_audit():
                 coverage = set(_split_values(event.get("覆盖 Change ID", "")))
                 target = event.get("目标基线", "")
                 if any(item.startswith("BASELINE-") for item in coverage):
-                    covered.update(
+                    covered_by_event = {
                         change_id for change_id, meta in change_map.items()
                         if role in meta["affected"]
                         and _version_key(meta["version"]) <= _version_key(target)
-                    )
+                    }
                 else:
-                    covered.update(coverage)
-            pending = sorted(relevant_changes - covered)
+                    covered_by_event = coverage
+                if evidence.startswith("⚠️"):
+                    anomalous_covered.update(covered_by_event)
+                else:
+                    verified_covered.update(covered_by_event)
+            never = sorted(relevant_changes - verified_covered - anomalous_covered)
+            resign = sorted((relevant_changes & anomalous_covered) - verified_covered)
             role_events.sort(key=lambda item: _version_key(item[0].get("目标基线", "")))
             latest = role_events[-1][0].get("目标基线", "—") if role_events else "—"
             latest_evidence = role_events[-1][1] if role_events else ""
@@ -678,10 +687,13 @@ def signoff_audit():
             history_gap = any(not evidence.startswith("✅") for _, evidence in role_events[:-1])
             if not relevant_changes:
                 state = "○ 当前无受影响变更"
-            elif pending:
-                state = "⚠️ 待签：" + ",".join(pending)
-            elif latest_evidence.startswith("⚠️"):
-                state = "⚠️ 证据异常（疑似代签/无效），需本人重签"
+            elif never or resign:
+                parts = []
+                if never:
+                    parts.append("待签：" + ",".join(never))
+                if resign:
+                    parts.append("待重签（疑似代签/无效）：" + ",".join(resign))
+                state = "⚠️ " + "；".join(parts)
             elif not latest_evidence_ok:
                 state = "🟡 覆盖完整，证据待验证"
             else:
