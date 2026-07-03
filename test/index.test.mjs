@@ -873,3 +873,54 @@ test("v0.9.3 keeps signoff orchestration with SM and normalizes role scope", () 
     fs.rmSync(sandbox, { recursive: true, force: true });
   }
 });
+
+test("v0.9.4 preserves Sprint lessons across knowledge, operations, and source trace", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-094-"));
+  const target = path.join(sandbox, "project");
+
+  try {
+    runCli([target, "--repo=learning-app", "--no-git", "--no-worktrees"]);
+
+    const scrum = path.join(target, "知识库", "Scrum");
+    const lessons = fs.readFileSync(
+      path.join(scrum, "06_经验教训与反模式清单.md"),
+      "utf8",
+    );
+    const quality = fs.readFileSync(
+      path.join(scrum, "08_质量门禁与测试金字塔指南.md"),
+      "utf8",
+    );
+    const smKnowledge = fs.readFileSync(
+      path.join(scrum, "12_SM流程监控与角色行动决策规范.md"),
+      "utf8",
+    );
+    const sources = fs.readFileSync(path.join(scrum, "99_来源索引.md"), "utf8");
+    const backflow = fs.readFileSync(
+      path.join(target, "知识库", "项目模板", "02_模板演进与反向回流指南.md"),
+      "utf8",
+    );
+
+    for (const lesson of [
+      "关闭后必须切换当前入口",
+      "计划周期不能被结果日期覆盖",
+      "CI 证据统一语义而非平台字段",
+      "稳定 CI 不必每个 Sprint 重建",
+      "测试数量不代表测试稳定",
+      "SM 的通知也是交付物",
+      "SM 把签核编排转给开发成员",
+    ]) {
+      assert.ok(lessons.includes(lesson), `missing backflow lesson: ${lesson}`);
+    }
+    assert.ok(quality.includes("不能单独证明“全部通过”或"));
+    assert.ok(smKnowledge.includes("SM 先识别问题类型，再选择模板"));
+    assert.ok(smKnowledge.includes("唯一编排责任"));
+    assert.ok(sources.includes("Sprint-1/02_Sprint1_Review纪要.md"));
+    assert.ok(sources.includes("07_度量改进/05_Sprint0-2阶段复盘.md"));
+    assert.ok(sources.includes("签核误派"));
+    assert.ok(backflow.includes("完整回流 Definition of Done"));
+    assert.ok(backflow.includes("只完成 L1 项目修复"));
+    assert.ok(backflow.includes("项目闭环"));
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});
