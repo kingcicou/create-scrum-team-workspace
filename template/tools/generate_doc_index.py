@@ -438,11 +438,23 @@ def stale_audit(docs):
 
     sa = signoff_audit()
     if sa is not None:
-        cur, srows = sa
+        cur, srows, mode, scope = sa
         badc = sum(1 for r in srows if "⚠️" in r[3])
+        scope_text = "、".join(scope) if scope else "无"
+        if mode == "入队首签":
+            next_action = "SM 建立首签任务卡并按 09 §10.1 通知全员；完成后核验本人行和提交身份。"
+        elif scope == ["SM"]:
+            next_action = "仅涉及 SM：SM 直接自查、更新本人行、重跑审计并发布闭环通知，不派给他人。"
+        elif scope:
+            next_action = "SM 按 09 §10.2 逐人通知范围内成员；不得把汇总、通知或验收转交给被签核成员。"
+        else:
+            next_action = "当前无活动签核；仅在新成员入队或职责/边界/IO 实质变化时重新建立范围。"
         parts.append(
             f"\n## ✍️ 签核状态（现行手册基线 = V{str(cur).replace('V', '')}）\n\n"
-            f"{len(srows)} 名角色，**{badc}** 名已签但基线过期；未签仅作入队提示。\n\n"
+            f"- 类型：**{mode}**\n"
+            f"- 应签范围：**{scope_text}**\n"
+            f"- 待处理：**{badc}** 名\n"
+            f"- SM 下一动作：{next_action}\n\n"
             "| 角色 | 成员 | 确认基线 | 状态 |\n|------|------|:--:|------|")
         for role, member, ver, state in srows:
             parts.append(f"| {role} | {member} | {ver} | {state} |")
@@ -481,19 +493,37 @@ def signoff_audit():
     text = charter.read_text(encoding="utf-8", errors="replace")
     fm = parse_frontmatter(text)
     cur = str(fm.get("version", "?"))
-    affected = set(fm.get("resign-roles", []))
+    aliases = {
+        "PO/PM": "PO",
+        "TL/Sr.BE": "TL",
+        "Mid.BE": "Mid.BE/QA",
+        "Mid.FE": "Mid.FE/QA",
+        "Sr.FE": "Sr.FE/UX",
+        "FS": "FS/DevOps",
+    }
+    canonical = lambda role: aliases.get(str(role).strip(), str(role).strip())
+    affected = {canonical(role) for role in fm.get("resign-roles", [])}
     norm = lambda v: str(v).replace("V", "").replace("v", "").strip()
     roles = ("PO", "SM", "TL", "Mid.BE/QA", "Sr.FE/UX", "Mid.FE/QA", "FS/DevOps")
-    rows = []
+    parsed = []
     for line in text.splitlines():
         if not line.startswith("|"):
             continue
         cols = [c.strip() for c in line.strip().strip("|").split("|")]
         if len(cols) < 7 or cols[0] not in roles:
             continue
-        role, member, ver = cols[0], cols[1], cols[5]
-        if ver in ("—", "", "-"):
-            state = "○ 未签（非开工门禁）"
+        parsed.append((cols[0], cols[1], cols[5]))
+    initial = bool(parsed) and all(ver in ("—", "", "-") for _, _, ver in parsed)
+    required = set(roles) if initial else affected
+    mode = "入队首签" if initial else ("变更重签" if required else "无活动签核")
+    rows = []
+    for role, member, ver in parsed:
+        if ver in ("—", "", "-") and initial:
+            state = "⚠️ 待首签（非代码开工门禁）"
+        elif ver in ("—", "", "-") and role in required:
+            state = "⚠️ 待重签（无旧基线）"
+        elif ver in ("—", "", "-"):
+            state = "○ 未签（需 SM 确认是否新入队）"
         elif norm(ver) != norm(cur) and role in affected:
             state = f"⚠️ 过期（签于 {ver}，现行 V{norm(cur)}）"
         elif norm(ver) != norm(cur):
@@ -501,7 +531,8 @@ def signoff_audit():
         else:
             state = "✅ 最新"
         rows.append((role, member, ver, state))
-    return cur, rows
+    scope = [role for role in roles if role in required]
+    return cur, rows, mode, scope
 
 
 def overview(docs):

@@ -725,8 +725,9 @@ governance: managed
     assert.ok(overview.includes("显式纳管"));
     assert.ok(overview.includes("历史、入口、骨架和 exempt 文档不形成治理债"));
     assert.ok(debt.includes("phase=错误阶段"));
-    assert.ok(audit.includes("未签仅作入队提示"));
-    assert.ok(audit.includes("未签（非开工门禁）"));
+    assert.ok(audit.includes("类型：**入队首签**"));
+    assert.ok(audit.includes("应签范围：**PO、SM、TL、Mid.BE/QA、Sr.FE/UX、Mid.FE/QA、FS/DevOps**"));
+    assert.ok(audit.includes("待首签（非代码开工门禁）"));
   } finally {
     fs.rmSync(sandbox, { recursive: true, force: true });
   }
@@ -801,6 +802,73 @@ test("v0.9.2 generates actionable closure and review integrity guidance", () => 
       }),
       (error) => error.status === 2,
     );
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("v0.9.3 keeps signoff orchestration with SM and normalizes role scope", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-093-"));
+  const target = path.join(sandbox, "project");
+  const python = process.env.PYTHON || "python";
+
+  try {
+    runCli([target, "--repo=signoff-app", "--no-git", "--no-worktrees"]);
+
+    const nav = path.join(target, "00_项目导航");
+    const smGuide = fs.readFileSync(
+      path.join(nav, "09_SM教练查询与回复模板.md"),
+      "utf8",
+    );
+    const manualPath = path.join(nav, "11_角色行动手册.md");
+    let roleManual = fs.readFileSync(manualPath, "utf8");
+    const smPlaybook = fs.readFileSync(
+      path.join(nav, "SM_作战手册_Sutherland.md"),
+      "utf8",
+    );
+
+    assert.ok(smGuide.includes("入队首签通知"));
+    assert.ok(smGuide.includes("误派纠偏通知"));
+    assert.ok(smGuide.includes("完成闭环通知"));
+    assert.ok(roleManual.includes("签核编排协议"));
+    assert.ok(roleManual.includes("不能把签核编排任务转给其他成员"));
+    assert.ok(roleManual.includes("仅 SM 自签"));
+    assert.ok(smPlaybook.includes("编排角色手册签核"));
+
+    roleManual = roleManual.replace("resign-roles: []", "resign-roles: [SM, FS]");
+    const roles = new Set([
+      "PO", "SM", "TL", "Mid.BE/QA", "Sr.FE/UX", "Mid.FE/QA", "FS/DevOps",
+    ]);
+    roleManual = roleManual
+      .split(/\r?\n/)
+      .map((line) => {
+        if (!line.startsWith("|")) return line;
+        const cols = line.split("|");
+        const role = cols[1]?.trim();
+        if (!roles.has(role) || cols.length < 10) return line;
+        cols[6] = " V1.1 ";
+        cols[7] = " 2026-07-03 ";
+        cols[8] = ` ${role.toLowerCase().replaceAll("/", "-")}-commit `;
+        return cols.join("|");
+      })
+      .join("\n");
+    fs.writeFileSync(manualPath, roleManual, "utf8");
+
+    execFileSync(python, [path.join(target, "tools", "generate_doc_index.py")], {
+      cwd: target,
+      encoding: "utf8",
+    });
+    const audit = fs.readFileSync(
+      path.join(nav, "文档索引", "06_停滞审计.md"),
+      "utf8",
+    );
+
+    assert.ok(audit.includes("类型：**变更重签**"));
+    assert.ok(audit.includes("应签范围：**SM、FS/DevOps**"));
+    assert.match(audit, /\| SM \| .*⚠️ 过期/);
+    assert.match(audit, /\| FS\/DevOps \| .*⚠️ 过期/);
+    assert.match(audit, /\| Mid\.BE\/QA \| .*✅ 有效（未受本次变更影响）/);
+    assert.ok(audit.includes("不得把汇总、通知或验收转交给被签核成员"));
   } finally {
     fs.rmSync(sandbox, { recursive: true, force: true });
   }
