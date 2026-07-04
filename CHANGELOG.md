@@ -6,6 +6,25 @@
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-07-04
+
+### Added
+
+- Campaign V3 记录工具版本、仓库 HEAD、审计生成时间、审计来源 HEAD 和范围指纹。
+- 新增 `signoff.mjs verify`，逐角色比较 Campaign 与当前全局待处理 Change ID。
+
+### Changed
+
+- `prepare` 在提交 Campaign 前校验全局覆盖；显式范围漏项时直接拒绝并提示
+  `--from-audit`。
+- `notify` 每次刷新全局审计并先运行覆盖验证；验证失败不输出通知。
+- `sign` 同样执行前置验证，防止绕过错误通知继续签核。
+
+### Fixed
+
+- 修复错误或过期 Campaign 可以生成通知、直到 close 才暴露范围缺口的问题。
+- 修复通知无法证明使用了哪个工具版本、仓库提交与审计范围的问题。
+
 ## [0.10.0] - 2026-07-04
 
 ### Added

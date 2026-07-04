@@ -1150,17 +1150,17 @@ test("v0.9.6 detects cosigning and excludes anomalous coverage from verified", (
   }
 });
 
-test("v0.10.0 keeps release entrypoints pinned to the package version", () => {
+test("v0.10.1 keeps release entrypoints pinned to the package version", () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(packageDir, "package.json"), "utf8"));
   const read = (name) => fs.readFileSync(path.join(packageDir, name), "utf8");
-  assert.equal(pkg.version, "0.10.0");
-  assert.match(read("README.md"), /create-scrum-team-workspace#v0\.10\.0/);
+  assert.equal(pkg.version, "0.10.1");
+  assert.match(read("README.md"), /create-scrum-team-workspace#v0\.10\.1/);
   assert.doesNotMatch(read("README.md"), /create-scrum-team-workspace\/v0\.9\.[1589]\//);
-  assert.match(read("create.sh"), /SCRUM_TEMPLATE_REF:-v0\.10\.0/);
-  assert.match(read("create.ps1"), /else \{ "v0\.10\.0" \}/);
+  assert.match(read("create.sh"), /SCRUM_TEMPLATE_REF:-v0\.10\.1/);
+  assert.match(read("create.ps1"), /else \{ "v0\.10\.1" \}/);
 });
 
-test("v0.10.0 isolates commit identity, serializes writes, and enforces global closure", () => {
+test("v0.10.1 validates provenance, serializes writes, and enforces global closure", () => {
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-0100-"));
   const target = path.join(sandbox, "project");
   try {
@@ -1296,9 +1296,31 @@ test("v0.10.0 isolates commit identity, serializes writes, and enforces global c
     const campaign = JSON.parse(fs.readFileSync(autoCampaign, "utf8"));
     assert.deepEqual(campaign.assignments.po.coverage, ["CHG-200"]);
     assert.equal(campaign.mode, "corrective");
+    assert.equal(campaign.toolVersion, "0.10.1");
+    assert.equal(campaign.scopeSource, "global-audit");
+    assert.match(campaign.auditScopeHash, /^[a-f0-9]{64}$/);
     assert.match(
       runSignoff(["notify", "--campaign=SIGN-20260704-001"]),
-      /无需、也禁止为签核反复修改 git user\.name\/user\.email/,
+      /生成依据：tool=0\.10\.1.*无需、也禁止为签核反复修改 git user\.name\/user\.email/s,
+    );
+
+    const driftedManual = manual.replace(
+      "| CHG-200 | V1.6 |",
+      "| CHG-300 | V1.6 | 2026-07-04 | TL 新增规则 | TL |\n| CHG-200 | V1.6 |",
+    );
+    fs.writeFileSync(manualPath, driftedManual, "utf8");
+    assert.throws(
+      () => runSignoff(["notify", "--campaign=SIGN-20260704-001"], { stdio: "pipe" }),
+      (error) => error.status === 2,
+    );
+    assert.throws(
+      () => runSignoff(["sign", "--campaign=SIGN-20260704-001", "--role=po"], { stdio: "pipe" }),
+      (error) => error.status === 2,
+    );
+    fs.writeFileSync(manualPath, manual, "utf8");
+    assert.match(
+      runSignoff(["verify", "--campaign=SIGN-20260704-001"]),
+      /Verify: OK/,
     );
     runSignoff(["sign", "--campaign=SIGN-20260704-001", "--role=po"]);
     runSignoff(["close", "--campaign=SIGN-20260704-001", "--actor=sm"]);

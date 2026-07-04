@@ -2,10 +2,12 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const TOOL_VERSION = "0.10.1";
 const ROLE_ALIASES = {
   po: "po", sm: "sm", tl: "tl",
   midbe: "midbe", "mid.be": "midbe", "mid.be/qa": "midbe",
@@ -63,6 +65,32 @@ function compactDate(value) {
 
 function splitValues(value) {
   return String(value || "").split(/[,，;]/).map((item) => item.trim()).filter(Boolean);
+}
+
+function stableObject(value) {
+  if (Array.isArray(value)) return value.map(stableObject);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.keys(value).sort().map((key) => [key, stableObject(value[key])]),
+    );
+  }
+  return value;
+}
+
+function scopeHash(audit) {
+  const scope = {
+    currentBaseline: audit.currentBaseline,
+    pendingAssignments: audit.pendingAssignments || {},
+  };
+  return crypto
+    .createHash("sha256")
+    .update(JSON.stringify(stableObject(scope)))
+    .digest("hex");
+}
+
+function versionNumber(value) {
+  const match = String(value || "").match(/(\d+(?:\.\d+)?)/);
+  return match ? Number(match[1]) : -1;
 }
 
 function sleep(milliseconds) {
@@ -267,6 +295,56 @@ function globalAuditOrFail(context) {
   return audit.data;
 }
 
+function repoHead(context) {
+  return git(context.repo, ["rev-parse", "HEAD"]).stdout.trim();
+}
+
+function coverageIncludes(coverage, changeId, campaignTarget, auditBaseline) {
+  if (coverage.includes(changeId)) return true;
+  return coverage.some((item) => item.startsWith("BASELINE-"))
+    && versionNumber(campaignTarget) >= versionNumber(auditBaseline);
+}
+
+function missingCoverage(campaign, audit) {
+  const missing = [];
+  for (const [roleId, required] of Object.entries(audit.pendingAssignments || {})) {
+    const coverage = campaign.assignments?.[roleId]?.coverage || [];
+    const absent = required.filter(
+      (changeId) => !coverageIncludes(
+        coverage,
+        changeId,
+        campaign.targetBaseline,
+        audit.currentBaseline,
+      ),
+    );
+    if (absent.length) missing.push({ roleId, coverage: absent });
+  }
+  return missing;
+}
+
+function verifyCampaign(context, campaignId, print = true) {
+  const { data: campaign } = loadCampaign(context, campaignId);
+  const audit = globalAuditOrFail(context);
+  const missing = missingCoverage(campaign, audit);
+  const currentHash = scopeHash(audit);
+  const exactSource = campaign.scopeSource === "global-audit"
+    && campaign.auditScopeHash === currentHash;
+  if (print) {
+    console.log(
+      `Verify: ${missing.length ? "FAILED" : "OK"}`
+      + ` · tool=${campaign.toolVersion || "legacy"}`
+      + ` · source=${campaign.scopeSource || "legacy"}`
+      + ` · audit=${String(campaign.auditScopeHash || "none").slice(0, 12)}`
+      + ` · current=${currentHash.slice(0, 12)}`
+      + ` · exact=${exactSource ? "yes" : "no"}`,
+    );
+    for (const item of missing) {
+      console.log(`- missing ${item.roleId}: ${item.coverage.join(",")}`);
+    }
+  }
+  return { campaign, audit, missing, currentHash, exactSource, ok: missing.length === 0 };
+}
+
 function evaluate(context, campaignId, print = true) {
   const { file: campaignFile, data: campaign } = loadCampaign(context, campaignId);
   const campaignEvidence = introduction(context, campaignFile, context.roles.sm);
@@ -329,12 +407,12 @@ function prepare(context, options) {
   requireActor(options, "sm");
   const sm = roleIdentity(context, "sm");
   withMutationLock(context, () => {
+    const audit = globalAuditOrFail(context);
     let assignments;
     let target = String(options.target || "").trim();
     let mode = options.mode || "incremental";
     let source = options.source || null;
     if (options["from-audit"]) {
-      const audit = globalAuditOrFail(context);
       if (!audit.pendingCount || !Object.keys(audit.pendingAssignments || {}).length) {
         fail("全局审计没有待处理角色，无需创建纠偏 Campaign。");
       }
@@ -362,12 +440,18 @@ function prepare(context, options) {
     const campaignId = String(options.campaign || nextCampaignId(context)).trim();
     const file = campaignPath(context, campaignId);
     if (fs.existsSync(file)) fail(`Campaign 已存在：${campaignId}`);
-    writeJson(file, {
-      schemaVersion: 2,
+    const campaign = {
+      schemaVersion: 3,
+      toolVersion: TOOL_VERSION,
       campaignId,
       mode,
       targetBaseline: target,
       sourceCampaignId: source,
+      scopeSource: options["from-audit"] ? "global-audit" : "explicit",
+      auditGeneratedAt: audit.generatedAt,
+      auditSourceHead: audit.sourceHead || null,
+      auditScopeHash: scopeHash(audit),
+      repositoryHead: repoHead(context),
       purpose: options.purpose || (options["from-audit"] ? "纠正全局签核缺口" : "确认受影响规范变更"),
       summary: options.summary || "按 Campaign 的逐角色范围完成阅读与签核。",
       readScope: splitValues(options.read || "本人角色卡;责任表;周期任务清单;角色行动手册指定变更章节"),
@@ -377,7 +461,15 @@ function prepare(context, options) {
       createdAt: localDate(),
       createdByRole: "sm",
       assignments,
-    });
+    };
+    const missing = missingCoverage(campaign, audit);
+    if (missing.length) {
+      const detail = missing
+        .map((item) => `${item.roleId}:${item.coverage.join(",")}`)
+        .join("；");
+      fail(`Campaign 未覆盖当前全局待处理：${detail}。请使用 --from-audit。`);
+    }
+    writeJson(file, campaign);
     commitOnly(context, file, `signoff(prepare): ${campaignId} ${target}`, sm);
     console.log(`[OK] Campaign 已创建并由 SM 提交：${relativeToRepo(context, file)}`);
     console.log(`[INFO] Campaign ID：${campaignId}`);
@@ -393,6 +485,10 @@ function sign(context, options) {
     const { data: campaign } = loadCampaign(context, campaignId);
     const assignment = campaign.assignments?.[roleId];
     if (!assignment) fail(`Campaign ${campaignId} 未分配角色 ${roleId}。`);
+    const verification = verifyCampaign(context, campaignId, false);
+    if (!verification.ok) {
+      fail("Campaign 未覆盖当前全局待处理，拒绝签核；请由 SM 运行 verify 并新建纠偏批次。");
+    }
     const campaignEvidence = introduction(context, campaignPath(context, campaignId), context.roles.sm);
     if (!campaignEvidence.ok) fail(`Campaign 尚未由 SM 有效提交：${campaignEvidence.detail}`);
     if (fs.existsSync(closurePath(context, campaignId))) fail(`Campaign 已存在 closure，拒绝继续签核：${campaignId}`);
@@ -461,8 +557,21 @@ function close(context, options) {
 
 function notify(context, options) {
   const campaignId = String(options.campaign || latestCampaignId(context));
-  const { data: campaign } = loadCampaign(context, campaignId);
+  const verification = verifyCampaign(context, campaignId, false);
+  if (!verification.ok) {
+    const detail = verification.missing
+      .map((item) => `${item.roleId}:${item.coverage.join(",")}`)
+      .join("；");
+    fail(`拒绝生成通知，Campaign 少覆盖当前全局待处理：${detail}`);
+  }
+  const campaign = verification.campaign;
   console.log(`【签核通知｜${campaignId}｜${campaign.targetBaseline}｜${campaign.mode}】`);
+  console.log(
+    `生成依据：tool=${campaign.toolVersion || "legacy"}`
+    + `｜scope=${campaign.scopeSource || "legacy"}`
+    + `｜audit=${String(campaign.auditScopeHash || "none").slice(0, 12)}`
+    + `｜head=${String(campaign.repositoryHead || "none").slice(0, 12)}`,
+  );
   if (campaign.sourceCampaignId) console.log(`来源：${campaign.sourceCampaignId}`);
   console.log(`目的：${campaign.purpose || "确认受影响规范变更"}`);
   console.log(`变更摘要：${campaign.summary || "见指定阅读范围"}`);
@@ -487,6 +596,11 @@ try {
   else if (command === "sign") sign(context, options);
   else if (command === "close") close(context, options);
   else if (command === "notify") notify(context, options);
+  else if (command === "verify") {
+    const campaignId = String(options.campaign || latestCampaignId(context));
+    const verification = verifyCampaign(context, campaignId, true);
+    process.exitCode = verification.ok ? 0 : 2;
+  }
   else if (command === "status") {
     const campaignId = String(options.campaign || latestCampaignId(context));
     const status = evaluate(context, campaignId, true);

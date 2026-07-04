@@ -519,8 +519,9 @@ def stale_audit(docs):
             parts.append("| " + " | ".join(event) + " |")
 
         audit_json = {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "generatedAt": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+            "sourceHead": _git_head(),
             "currentBaseline": f"V{str(cur).replace('V', '')}",
             "campaignId": sa["campaign"],
             "closedCampaignId": sa.get("latest_closed_campaign") or None,
@@ -669,6 +670,16 @@ def _git_file_evidence(relative_path, member="", email=""):
     if email and author_email.lower() != email.lower():
         return f"⚠️ 首次邮箱 {author_email}，应为 {email}"
     return f"✅ {commit[:9]} · {author} <{author_email}> · {authored}"
+
+
+def _git_head():
+    try:
+        return subprocess.run(
+            ["git", "-C", str(SIGNOFF_REPO), "rev-parse", "HEAD"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return None
 
 
 def _load_file_signoffs():
