@@ -6,6 +6,23 @@
 
 ## [Unreleased]
 
+## [0.9.8] - 2026-07-04
+
+### Fixed
+
+- 统一 README、PowerShell/Bash 引导脚本与 npm 制品版本，默认安装 `v0.9.8`。
+- 新 `auto` 签核事件在 Git 提交前不再计入当前覆盖；`LEGACY + unverified`
+  继续按迁移兼容规则处理。
+- Campaign 关闭后仍有待处理时，审计明确报告事实冲突并要求建立
+  `corrective` 批次；关闭前必须待处理归零。
+- 默认 Review/Retro 增加空“评审意见追加”区，`review-status.mjs` 增加缺失、
+  重复、嵌套和未配对锚点检查。
+
+### Added
+
+- 发布入口一致性、默认 Review/Retro、待提交覆盖、关闭后纠偏的回归测试。
+- 项目侧 V1.5 关闭后异常作为来源回流到既有 Scrum/06、12、13 与来源索引。
+
 ## [0.9.7] - 2026-07-03
 
 ### Fixed

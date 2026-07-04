@@ -379,6 +379,18 @@ def collab_issues():
                 probs.append("重复二级标题: " + " / ".join(dup2))
             opens = Counter(re.findall(r"<!--\s*append:role=([\w-]+)\s*-->", text))
             closes = Counter(re.findall(r"<!--\s*/append:role=([\w-]+)\s*-->", text))
+            section = re.search(
+                r"^##\s+评审意见追加\s*$([\s\S]*?)(?=^##\s+|\Z)", text, re.M
+            )
+            entry_count = 0
+            if section:
+                entry_count = sum(
+                    1 for heading in re.findall(r"^###\s+(.+?)\s*$", section.group(1), re.M)
+                    if not re.match(r"^关闭后裁决(?:\s|$)", heading)
+                )
+            strict_anchors = "append-policy: anchors-v1" in text or bool(opens or closes)
+            if strict_anchors and entry_count and not opens:
+                probs.append("追加条目缺少角色锚点")
             if opens or closes:
                 unmatched = sorted(r for r in set(opens) | set(closes) if opens[r] != closes[r])
                 dup = sorted(r for r, c in opens.items() if c > 1)
@@ -386,6 +398,8 @@ def collab_issues():
                     probs.append("锚点未配对: " + ", ".join(unmatched))
                 if dup:
                     probs.append("重复锚点: " + ", ".join(dup))
+                if strict_anchors and entry_count != sum(opens.values()):
+                    probs.append(f"追加标题/锚点数量不一致: {entry_count}/{sum(opens.values())}")
             out.append((path.relative_to(ROOT).as_posix(), "; ".join(probs) if probs else "OK"))
     return out
 
@@ -445,7 +459,17 @@ def stale_audit(docs):
         scope = sa["scope"]
         badc = sum(1 for r in srows if r[3].startswith(("⚠️", "🟡")))
         scope_text = "、".join(scope) if scope else "无"
-        if mode == "initial":
+        closed_conflict = badc > 0 and not scope and bool(sa["closed_campaign"])
+        if badc == 0 and scope:
+            next_action = "审计已无待处理；SM 可登记关闭证据、关闭批次并发布闭环通知。"
+        elif closed_conflict:
+            next_action = (
+                f"已关闭批次 {sa['closed_campaign']} 后发现待处理；保留原记录，"
+                "SM 立即建立 corrective 批次并逐人纠偏。"
+            )
+        elif badc > 0 and not scope:
+            next_action = "当前无活动批次但仍有待处理；SM 立即建立 incremental/corrective 批次。"
+        elif mode == "initial":
             next_action = "SM 按 09 §10.1 发起首签；成员在事件台账追加本人 Event ID。"
         elif mode == "full-rebaseline":
             next_action = "SM 按 09 §10.6 发起全量重基线；恢复当前有效性但保留旧历史缺口。"
@@ -461,7 +485,11 @@ def stale_audit(docs):
             f"- 模式：**{mode}**\n"
             f"- 应签范围：**{scope_text}**\n"
             f"- 待处理：**{badc}** 名\n"
-            f"- SM 下一动作：{next_action}\n\n"
+            + (
+                f"- 事实冲突：**已关闭批次 {sa['closed_campaign']} 与当前待处理并存**\n"
+                if closed_conflict else ""
+            )
+            + f"- SM 下一动作：{next_action}\n\n"
             "| 角色 | 成员 | 最新目标基线 | 状态 |\n|------|------|:--:|------|")
         for role, member, ver, state in srows:
             parts.append(f"| {role} | {member} | {ver} | {state} |")
@@ -622,6 +650,13 @@ def signoff_audit():
         ]
         active.sort(key=lambda item: _version_key(item.get("目标基线", "")), reverse=True)
         campaign = active[0] if active else None
+        closed = [
+            item for item in campaigns
+            if item.get("状态", "").lower() in ("closed", "关闭", "已关闭")
+            and _version_key(item.get("目标基线", "")) >= _version_key(cur)
+        ]
+        closed.sort(key=lambda item: _version_key(item.get("目标基线", "")), reverse=True)
+        closed_campaign = closed[0].get("Campaign ID", "") if closed else ""
         scope = []
         if campaign:
             raw_scope = {canonical(role) for role in _split_values(campaign.get("应签角色", ""))}
@@ -654,11 +689,10 @@ def signoff_audit():
                 change_id for change_id, meta in change_map.items()
                 if role in meta["affected"] and _version_key(meta["version"]) <= _version_key(cur)
             }
-            # 只排除 ⚠️（疑似代签/无效 legacy）证据：它们覆盖的 CHG 不计数，
-            # 必须继续显示待重签，避免“旧代签占位 + 新本人补签”伪装成完整覆盖。
-            # 🟡（unverified 历史/待提交）沿用 v0.9.5 语义：计入覆盖但另标历史缺口。
             verified_covered = set()
+            historical_covered = set()
             anomalous_covered = set()
+            pending_covered = set()
             role_events = []
             for event, event_role, evidence in accepted:
                 if event_role != role:
@@ -674,12 +708,23 @@ def signoff_audit():
                     }
                 else:
                     covered_by_event = coverage
-                if evidence.startswith("⚠️"):
-                    anomalous_covered.update(covered_by_event)
-                else:
+                method = event.get("证据方式", "")
+                if evidence.startswith("✅"):
                     verified_covered.update(covered_by_event)
-            never = sorted(relevant_changes - verified_covered - anomalous_covered)
+                elif evidence.startswith("⚠️"):
+                    anomalous_covered.update(covered_by_event)
+                elif method == "unverified" and event.get("Campaign ID", "") == "LEGACY":
+                    historical_covered.update(covered_by_event)
+                else:
+                    pending_covered.update(covered_by_event)
+            never = sorted(
+                relevant_changes
+                - verified_covered - historical_covered - anomalous_covered - pending_covered
+            )
             resign = sorted((relevant_changes & anomalous_covered) - verified_covered)
+            pending = sorted(
+                (relevant_changes & pending_covered) - verified_covered - anomalous_covered
+            )
             role_events.sort(key=lambda item: _version_key(item[0].get("目标基线", "")))
             latest = role_events[-1][0].get("目标基线", "—") if role_events else "—"
             latest_evidence = role_events[-1][1] if role_events else ""
@@ -687,15 +732,15 @@ def signoff_audit():
             history_gap = any(not evidence.startswith("✅") for _, evidence in role_events[:-1])
             if not relevant_changes:
                 state = "○ 当前无受影响变更"
-            elif never or resign:
+            elif never or resign or pending:
                 parts = []
                 if never:
                     parts.append("待签：" + ",".join(never))
                 if resign:
                     parts.append("待重签（疑似代签/无效）：" + ",".join(resign))
+                if pending:
+                    parts.append("待提交/验证：" + ",".join(pending))
                 state = "⚠️ " + "；".join(parts)
-            elif not latest_evidence_ok:
-                state = "🟡 覆盖完整，证据待验证"
             else:
                 state = "✅ 当前有效" + ("；⚠️ 历史证据缺口" if history_gap else "")
             state_rows.append((role, members[role], latest, state))
@@ -706,6 +751,7 @@ def signoff_audit():
             "mode": campaign.get("模式", "无活动批次") if campaign else "无活动批次",
             "scope": scope,
             "campaign": campaign.get("Campaign ID", "无") if campaign else "无",
+            "closed_campaign": closed_campaign,
             "events": rendered_events,
         }
 
@@ -741,7 +787,7 @@ def signoff_audit():
     scope = [role for role in roles if role in required]
     return {
         "current": cur, "rows": rows, "mode": mode, "scope": scope,
-        "campaign": "legacy-snapshot", "events": [],
+        "campaign": "legacy-snapshot", "closed_campaign": "", "events": [],
     }
 
 

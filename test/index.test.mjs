@@ -767,6 +767,18 @@ test("v0.9.2 generates actionable closure and review integrity guidance", () => 
     assert.ok(closureGuide.includes("平台无关的 CI 最小证据"));
     assert.ok(closureGuide.includes("单一事实源归档"));
 
+    const tool = path.join(target, "tools", "review-status.mjs");
+    for (const generated of [
+      path.join(target, "03_迭代运行", "Sprint-0-启动", "04_Sprint评审记录.md"),
+      path.join(target, "03_迭代运行", "Sprint-0-启动", "05_Sprint回顾记录.md"),
+    ]) {
+      const emptyOutput = execFileSync(process.execPath, [tool, generated], {
+        cwd: target,
+        encoding: "utf8",
+      });
+      assert.ok(emptyOutput.includes("Review entries (0)"));
+    }
+
     const review = path.join(target, "review.md");
     fs.writeFileSync(
       review,
@@ -774,18 +786,21 @@ test("v0.9.2 generates actionable closure and review integrity guidance", () => 
 
 ## 评审意见追加
 
+<!-- append:role=TL -->
 ### Alice (TL) · 2026-07-03
 
 通过。
+<!-- /append:role=TL -->
 
+<!-- append:role=FS -->
 ### Bob (FS) · 2026-07-03
 
 通过。
+<!-- /append:role=FS -->
 `,
       "utf8",
     );
 
-    const tool = path.join(target, "tools", "review-status.mjs");
     const output = execFileSync(process.execPath, [tool, review], {
       cwd: target,
       encoding: "utf8",
@@ -794,7 +809,25 @@ test("v0.9.2 generates actionable closure and review integrity guidance", () => 
     assert.ok(output.includes("Alice (TL)"));
     assert.ok(output.includes("Bob (FS)"));
 
-    fs.appendFileSync(review, "\n### Alice (TL) · 2026-07-04\n", "utf8");
+    const unanchored = path.join(target, "review-unanchored.md");
+    fs.writeFileSync(
+      unanchored,
+      "# Review\n\n## 评审意见追加\n\n<!-- append-policy: anchors-v1 -->\n\n### Carol (PO) · 2026-07-03\n\n通过。\n",
+      "utf8",
+    );
+    assert.throws(
+      () => execFileSync(process.execPath, [tool, unanchored], {
+        cwd: target,
+        stdio: "pipe",
+      }),
+      (error) => error.status === 2,
+    );
+
+    fs.appendFileSync(
+      review,
+      "\n<!-- append:role=TL -->\n### Alice (TL) · 2026-07-04\n<!-- /append:role=TL -->\n",
+      "utf8",
+    );
     assert.throws(
       () => execFileSync(process.execPath, [tool, review], {
         cwd: target,
@@ -837,12 +870,12 @@ test("v0.9.3 keeps signoff orchestration with SM and normalizes role scope", () 
 
     roleManual = roleManual
       .replace(
-        /\| CHG-100 \| V1\.3 \| [^|]+ \| 首版；含关闭同步、变化触发式 CI、签核编排与事件模型 \| ALL \|/,
-        "| CHG-100 | V1.3 | 2026-07-03 | 别名匹配验证 | SM,FS |",
+        /\| CHG-100 \| V1\.4 \| [^|]+ \| 首版；含关闭同步、变化触发式 CI、签核编排、纠偏批次与事件模型 \| ALL \|/,
+        "| CHG-100 | V1.4 | 2026-07-03 | 别名匹配验证 | SM,FS |",
       )
       .replace(
-        /\| SIGN-INIT-001 \| initial \| V1\.3 \| CHG-100 \| ALL \| [^|]+ \| 由 SM 确认 \| open \| — \|/,
-        "| SIGN-ALIAS-001 | incremental | V1.3 | CHG-100 | SM,FS | 2026-07-03 | 2026-07-04 | open | — |",
+        /\| SIGN-INIT-001 \| initial \| V1\.4 \| CHG-100 \| ALL \| [^|]+ \| 由 SM 确认 \| open \| — \|/,
+        "| SIGN-ALIAS-001 | incremental | V1.4 | CHG-100 | SM,FS | 2026-07-03 | 2026-07-04 | open | — |",
       );
     fs.writeFileSync(manualPath, roleManual, "utf8");
 
@@ -929,16 +962,15 @@ test("v0.9.5 traces catch-up coverage and keeps rebaseline history honest", () =
     const manualPath = path.join(nav, "11_角色行动手册.md");
     let manual = fs.readFileSync(manualPath, "utf8");
     manual = manual
-      .replace("version: 1.3", "version: 1.4")
       .replace(
-        /\| CHG-100 \| V1\.3 \| [^|]+ \| 首版；含关闭同步、变化触发式 CI、签核编排与事件模型 \| ALL \|/,
+        /\| CHG-100 \| V1\.4 \| [^|]+ \| 首版；含关闭同步、变化触发式 CI、签核编排、纠偏批次与事件模型 \| ALL \|/,
         `| CHG-100 | V1.0 | 2026-07-01 | 首版 | FS/DevOps |
 | CHG-120 | V1.2 | 2026-07-02 | CI 变化触发 | FS |
 | CHG-130 | V1.3 | 2026-07-02 | SM 编排 | SM |
 | CHG-140 | V1.4 | 2026-07-03 | CI 证据契约 | FS/DevOps |`,
       )
       .replace(
-        /\| SIGN-INIT-001 \| initial \| V1\.3 \| CHG-100 \| ALL \| [^|]+ \| 由 SM 确认 \| open \| — \|/,
+        /\| SIGN-INIT-001 \| initial \| V1\.4 \| CHG-100 \| ALL \| [^|]+ \| 由 SM 确认 \| open \| — \|/,
         "| SIGN-CATCHUP-001 | catch-up | V1.4 | CHG-120,CHG-140 | FS | 2026-07-03 | 2026-07-04 | open | — |",
       )
       .replace(
@@ -1033,14 +1065,14 @@ test("v0.9.6 detects cosigning and excludes anomalous coverage from verified", (
     const manualPath = path.join(nav, "11_角色行动手册.md");
     let manual = fs.readFileSync(manualPath, "utf8");
     manual = manual
-      .replace("version: 1.3", "version: 1.5")
+      .replace("version: 1.4", "version: 1.5")
       .replace(
-        /\| CHG-100 \| V1\.3 \| [^|]+ \| 首版；含关闭同步、变化触发式 CI、签核编排与事件模型 \| ALL \|/,
+        /\| CHG-100 \| V1\.4 \| [^|]+ \| 首版；含关闭同步、变化触发式 CI、签核编排、纠偏批次与事件模型 \| ALL \|/,
         `| CHG-100 | V1.0 | 2026-07-01 | 首版 | FS/DevOps |
 | CHG-200 | V1.2 | 2026-07-02 | CI 变化触发 | FS/DevOps |`,
       )
       .replace(
-        /\| SIGN-INIT-001 \| initial \| V1\.3 \| CHG-100 \| ALL \| [^|]+ \| 由 SM 确认 \| open \| — \|/,
+        /\| SIGN-INIT-001 \| initial \| V1\.4 \| CHG-100 \| ALL \| [^|]+ \| 由 SM 确认 \| open \| — \|/,
         "| SIGN-096-001 | incremental | V1.5 | CHG-100,CHG-200 | FS | 2026-07-03 | 2026-07-04 | open | — |",
       )
       .replace(
@@ -1072,7 +1104,23 @@ test("v0.9.6 detects cosigning and excludes anomalous coverage from verified", (
     assert.match(fsStateLine(audit), /待重签（疑似代签\/无效）：.*CHG-100/);
     assert.doesNotMatch(fsStateLine(audit), /^\| FS\/DevOps \|.*✅ 当前有效/);
 
-    // 场景 3：未提交的事件行 → blame 在 HEAD 找不到 → 🟡 待 Git 提交
+    // 场景 3：批次被提前关闭时必须报告事实冲突并要求 corrective。
+    manual = fs.readFileSync(manualPath, "utf8").replace(
+      "| SIGN-096-001 | incremental | V1.5 | CHG-100,CHG-200 | FS | 2026-07-03 | 2026-07-04 | open | — |",
+      "| SIGN-096-001 | incremental | V1.5 | CHG-100,CHG-200 | FS | 2026-07-03 | 2026-07-04 | closed | premature |",
+    );
+    fs.writeFileSync(manualPath, manual, "utf8");
+    runGen();
+    audit = readAudit();
+    assert.ok(audit.includes("已关闭批次 SIGN-096-001 与当前待处理并存"));
+    assert.ok(audit.includes("建立 corrective 批次"));
+    manual = fs.readFileSync(manualPath, "utf8").replace(
+      "| SIGN-096-001 | incremental | V1.5 | CHG-100,CHG-200 | FS | 2026-07-03 | 2026-07-04 | closed | premature |",
+      "| SIGN-096-001 | incremental | V1.5 | CHG-100,CHG-200 | FS | 2026-07-03 | 2026-07-04 | open | — |",
+    );
+    fs.writeFileSync(manualPath, manual, "utf8");
+
+    // 场景 4：未提交的新事件不计覆盖，必须显示待提交/验证。
     manual = fs.readFileSync(manualPath, "utf8").replace(
       "| EVT-FS-001 | SIGN-096-001 | FS/DevOps | Atlas | V1.0 | V1.0 | CHG-100 | 2026-07-03 | auto | accepted |",
       `| EVT-FS-001 | SIGN-096-001 | FS/DevOps | Atlas | V1.0 | V1.0 | CHG-100 | 2026-07-03 | auto | accepted |
@@ -1082,8 +1130,9 @@ test("v0.9.6 detects cosigning and excludes anomalous coverage from verified", (
     runGen();
     audit = readAudit();
     assert.match(audit, /EVT-FS-002 \|.*🟡 待 Git 提交/);
+    assert.match(fsStateLine(audit), /待提交\/验证：.*CHG-200/);
 
-    // 场景 4：本人（Atlas）提交补签 CHG-100 与 CHG-200 → 从待重签转为当前有效
+    // 场景 5：本人（Atlas）提交补签 CHG-100 与 CHG-200 → 从待重签转为当前有效
     manual = fs.readFileSync(manualPath, "utf8").replace(
       "| EVT-FS-002 | SIGN-096-001 | FS/DevOps | Atlas | V1.0 | V1.2 | CHG-200 | 2026-07-03 | auto | accepted |",
       `| EVT-FS-002 | SIGN-096-001 | FS/DevOps | Atlas | V1.0 | V1.2 | CHG-200 | 2026-07-03 | auto | accepted |
@@ -1099,4 +1148,14 @@ test("v0.9.6 detects cosigning and excludes anomalous coverage from verified", (
   } finally {
     fs.rmSync(sandbox, { recursive: true, force: true });
   }
+});
+
+test("v0.9.8 keeps release entrypoints pinned to the package version", () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(packageDir, "package.json"), "utf8"));
+  const read = (name) => fs.readFileSync(path.join(packageDir, name), "utf8");
+  assert.equal(pkg.version, "0.9.8");
+  assert.match(read("README.md"), /create-scrum-team-workspace#v0\.9\.8/);
+  assert.doesNotMatch(read("README.md"), /create-scrum-team-workspace\/v0\.9\.[15]\//);
+  assert.match(read("create.sh"), /SCRUM_TEMPLATE_REF:-v0\.9\.8/);
+  assert.match(read("create.ps1"), /else \{ "v0\.9\.8" \}/);
 });
