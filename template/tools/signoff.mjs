@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const TOOL_VERSION = "0.10.3";
+const TOOL_VERSION = "0.10.4";
 const ROLE_ALIASES = {
   po: "po", sm: "sm", tl: "tl",
   midbe: "midbe", "mid.be": "midbe", "mid.be/qa": "midbe",
@@ -61,6 +61,26 @@ function localDate() {
 
 function compactDate(value) {
   return value.replaceAll("-", "");
+}
+
+function validateDue(value, timezone) {
+  const due = String(value || "").trim();
+  if (!due) fail("prepare 必须提供 --due=<未来时间>，不得使用待确认或群聊补写。");
+  let instant;
+  const local = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})(?::(\d{2}))?$/.exec(due);
+  if (local) {
+    const offsets = { "Asia/Shanghai": "+08:00", UTC: "Z" };
+    const offset = offsets[timezone];
+    if (!offset) {
+      fail(`截止时间 ${due} 未含时区偏移，当前仅支持 Asia/Shanghai 或 UTC。`);
+    }
+    instant = Date.parse(`${local[1]}T${local[2]}:${local[3] || "00"}${offset}`);
+  } else {
+    instant = Date.parse(due);
+  }
+  if (!Number.isFinite(instant)) fail(`无法解析截止时间：${due}`);
+  if (instant <= Date.now()) fail(`截止时间必须晚于当前时间：${due}`);
+  return due;
 }
 
 function splitValues(value) {
@@ -253,6 +273,10 @@ function campaignPath(context, campaignId) {
   return path.join(context.store, "campaigns", `${campaignId}.json`);
 }
 
+function noticePath(context, campaignId) {
+  return path.join(context.store, "notices", `${campaignId}.json`);
+}
+
 function closurePath(context, campaignId) {
   return path.join(context.store, "closures", `${campaignId}.json`);
 }
@@ -338,6 +362,63 @@ function repoHead(context) {
 
 function repoTree(context) {
   return git(context.repo, ["rev-parse", "HEAD^{tree}"]).stdout.trim();
+}
+
+function noticeDigest(campaign) {
+  const payload = {
+    campaignId: campaign.campaignId,
+    targetBaseline: campaign.targetBaseline,
+    mode: campaign.mode,
+    sourceCampaignId: campaign.sourceCampaignId,
+    scopeSource: campaign.scopeSource,
+    auditScopeHash: campaign.auditScopeHash,
+    repositoryHead: campaign.repositoryHead,
+    repositoryTree: campaign.repositoryTree,
+    purpose: campaign.purpose,
+    summary: campaign.summary,
+    readScope: campaign.readScope,
+    dueAt: campaign.dueAt,
+    timezone: campaign.timezone,
+    assignments: campaign.assignments,
+  };
+  return crypto
+    .createHash("sha256")
+    .update(JSON.stringify(stableObject(payload)))
+    .digest("hex");
+}
+
+function renderNotice(context, campaign, digest) {
+  const lines = [
+    `【签核通知｜${campaign.campaignId}｜${campaign.targetBaseline}｜${campaign.mode}】`,
+    `通知凭证：sha256=${digest}`,
+    `生成依据：tool=${campaign.toolVersion || "legacy"}`
+      + `｜scope=${campaign.scopeSource || "legacy"}`
+      + `｜audit=${String(campaign.auditScopeHash || "none").slice(0, 12)}`
+      + `｜head=${String(campaign.repositoryHead || "none").slice(0, 12)}`
+      + `｜tree=${String(campaign.repositoryTree || "none").slice(0, 12)}`,
+  ];
+  if (campaign.sourceCampaignId) lines.push(`来源：${campaign.sourceCampaignId}`);
+  lines.push(`目的：${campaign.purpose || "确认受影响规范变更"}`);
+  lines.push(`变更摘要：${campaign.summary || "见指定阅读范围"}`);
+  lines.push(`阅读范围：${(campaign.readScope || []).join("；") || "由 SM 指定"}`);
+  lines.push(`截止：${campaign.dueAt}（${campaign.timezone}）`);
+  lines.push("身份：无需、也禁止为签核反复修改 git user.name/user.email；命令仅对本次提交使用角色事实源。");
+  lines.push("执行：只运行本人下方完整命令；缺少或修改 --notice 时工具拒绝签核。");
+  for (const [roleId, assignment] of Object.entries(campaign.assignments || {})) {
+    const role = context.roles[roleId];
+    lines.push(`@${role.name} (${roleId})：覆盖 ${assignment.coverage.join(",")}`);
+    lines.push(
+      `  node tools/signoff.mjs sign --campaign=${campaign.campaignId}`
+      + ` --role=${roleId} --notice=${digest}`,
+    );
+  }
+  lines.push("完成回复：【签核完成】角色/成员 + 命令输出中的 Event ID；无需手填 commit。");
+  lines.push(`验收：SM 运行 node tools/signoff.mjs status --campaign=${campaign.campaignId}`);
+  lines.push(
+    `关闭：仅 SM 运行 node tools/signoff.mjs close --campaign=${campaign.campaignId}`
+    + " --actor=sm；项目全局仍有缺口时工具拒绝关闭。",
+  );
+  return lines;
 }
 
 function coverageIncludes(coverage, changeId, campaignTarget, auditBaseline) {
@@ -450,6 +531,8 @@ function prepare(context, options) {
   const sm = roleIdentity(context, "sm");
   withMutationLock(context, () => {
     ensureCleanAuditSource(context, "prepare");
+    const timezone = String(options.timezone || "Asia/Shanghai");
+    const dueAt = validateDue(options.due, timezone);
     const audit = globalAuditOrFail(context);
     let assignments;
     let target = String(options.target || "").trim();
@@ -500,8 +583,8 @@ function prepare(context, options) {
       purpose: options.purpose || (options["from-audit"] ? "纠正全局签核缺口" : "确认受影响规范变更"),
       summary: options.summary || "按 Campaign 的逐角色范围完成阅读与签核。",
       readScope: splitValues(options.read || "本人角色卡;责任表;周期任务清单;角色行动手册指定变更章节"),
-      dueAt: options.due || "由 SM 确认",
-      timezone: options.timezone || "Asia/Shanghai",
+      dueAt,
+      timezone,
       identityMode: "command-scoped",
       createdAt: localDate(),
       createdByRole: "sm",
@@ -528,6 +611,7 @@ function sign(context, options) {
   withMutationLock(context, () => {
     const campaignId = String(options.campaign || latestCampaignId(context));
     const { data: campaign } = loadCampaign(context, campaignId);
+    validateDue(campaign.dueAt, campaign.timezone);
     const assignment = campaign.assignments?.[roleId];
     if (!assignment) fail(`Campaign ${campaignId} 未分配角色 ${roleId}。`);
     const verification = verifyCampaign(context, campaignId, false);
@@ -536,6 +620,19 @@ function sign(context, options) {
     }
     const campaignEvidence = introduction(context, campaignPath(context, campaignId), context.roles.sm);
     if (!campaignEvidence.ok) fail(`Campaign 尚未由 SM 有效提交：${campaignEvidence.detail}`);
+    const noticeFile = noticePath(context, campaignId);
+    if (!fs.existsSync(noticeFile)) fail(`Campaign 尚未发布 Notice：${campaignId}`);
+    const notice = readJson(noticeFile);
+    const digest = noticeDigest(campaign);
+    const suppliedDigest = String(options.notice || "");
+    if (notice.digest !== digest || suppliedDigest !== digest) {
+      fail("Notice 摘要缺失或不匹配；请从 SM 发布的原始 Notice 运行本人完整命令。");
+    }
+    const noticeEvidence = introduction(context, noticeFile, context.roles.sm);
+    if (!noticeEvidence.ok) fail(`Notice 未由 SM 有效发布：${noticeEvidence.detail}`);
+    if (JSON.stringify(notice.content) !== JSON.stringify(renderNotice(context, campaign, digest))) {
+      fail("Notice 内容与 Campaign 不一致，拒绝签核。");
+    }
     if (fs.existsSync(closurePath(context, campaignId))) fail(`Campaign 已存在 closure，拒绝继续签核：${campaignId}`);
 
     const existing = eventFiles(context, campaignId);
@@ -558,6 +655,7 @@ function sign(context, options) {
       coverage: assignment.coverage,
       signedAt: localDate(),
       identityMode: "command-scoped",
+      noticeDigest: digest,
       result: "accepted",
     });
     commitOnly(context, file, `sign(${roleId}): ${eventId} · ${campaignId}`, member);
@@ -601,7 +699,10 @@ function close(context, options) {
   });
 }
 
-function notify(context, options) {
+function publish(context, options) {
+  requireActor(options, "sm");
+  const sm = roleIdentity(context, "sm");
+  withMutationLock(context, () => {
   const campaignId = String(options.campaign || latestCampaignId(context));
   const verification = verifyCampaign(context, campaignId, false);
   if (!verification.ok) {
@@ -618,29 +719,30 @@ function notify(context, options) {
     );
   }
   const campaign = verification.campaign;
-  console.log(`【签核通知｜${campaignId}｜${campaign.targetBaseline}｜${campaign.mode}】`);
-  console.log(
-    `生成依据：tool=${campaign.toolVersion || "legacy"}`
-    + `｜scope=${campaign.scopeSource || "legacy"}`
-    + `｜audit=${String(campaign.auditScopeHash || "none").slice(0, 12)}`
-    + `｜head=${String(campaign.repositoryHead || "none").slice(0, 12)}`
-    + `｜tree=${String(campaign.repositoryTree || "none").slice(0, 12)}`,
-  );
-  if (campaign.sourceCampaignId) console.log(`来源：${campaign.sourceCampaignId}`);
-  console.log(`目的：${campaign.purpose || "确认受影响规范变更"}`);
-  console.log(`变更摘要：${campaign.summary || "见指定阅读范围"}`);
-  console.log(`阅读范围：${(campaign.readScope || []).join("；") || "由 SM 指定"}`);
-  console.log(`截止：${campaign.dueAt || "由 SM 确认"}（${campaign.timezone || "Asia/Shanghai"}）`);
-  console.log("身份：无需、也禁止为签核反复修改 git user.name/user.email；命令仅对本次提交使用角色事实源。");
-  console.log("执行：在共享工作目录中直接运行本人命令；工具会用互斥锁串行提交，锁占用时等待后重试。");
-  for (const [roleId, assignment] of Object.entries(campaign.assignments || {})) {
-    const role = context.roles[roleId];
-    console.log(`@${role.name} (${roleId})：覆盖 ${assignment.coverage.join(",")}`);
-    console.log(`  node tools/signoff.mjs sign --campaign=${campaignId} --role=${roleId}`);
-  }
-  console.log("完成回复：【签核完成】角色/成员 + 命令输出中的 Event ID；无需手填 commit。");
-  console.log(`验收：SM 运行 node tools/signoff.mjs status --campaign=${campaignId}`);
-  console.log(`关闭：仅 SM 运行 node tools/signoff.mjs close --campaign=${campaignId} --actor=sm；项目全局仍有缺口时工具拒绝关闭。`);
+  validateDue(campaign.dueAt, campaign.timezone);
+  const file = noticePath(context, campaignId);
+  if (fs.existsSync(file)) fail(`Notice 已存在：${campaignId}`);
+  const digest = noticeDigest(campaign);
+  const content = renderNotice(context, campaign, digest);
+  writeJson(file, {
+    schemaVersion: 1,
+    campaignId,
+    digest,
+    publishedAt: localDate(),
+    publishedByRole: "sm",
+    content,
+  });
+  commitOnly(context, file, `signoff(publish): ${campaignId}`, sm);
+  const evidence = introduction(context, file, sm);
+  if (!evidence.ok) fail(`Notice 发布后校验失败：${evidence.detail}`);
+  console.log(`【NOTICE-BEGIN｜${campaignId}｜sha256=${digest}】`);
+  for (const line of content) console.log(line);
+  console.log(`【NOTICE-END｜${campaignId}｜sha256=${digest}｜禁止修改】`);
+  });
+}
+
+function notify() {
+  fail("notify 已停用；请由 SM 运行 publish --campaign=<ID> --actor=sm 发布不可变 Notice。");
 }
 
 try {
@@ -649,6 +751,7 @@ try {
   if (command === "prepare") prepare(context, options);
   else if (command === "sign") sign(context, options);
   else if (command === "close") close(context, options);
+  else if (command === "publish") publish(context, options);
   else if (command === "notify") notify(context, options);
   else if (command === "verify") {
     const campaignId = String(options.campaign || latestCampaignId(context));

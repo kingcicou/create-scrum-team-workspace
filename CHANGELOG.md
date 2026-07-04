@@ -6,6 +6,24 @@
 
 ## [Unreleased]
 
+## [0.10.4] - 2026-07-04
+
+### Added
+
+- 新增 `publish --campaign=<ID> --actor=sm`，生成并提交不可变 Notice 工件。
+- Notice 为每个角色生成带完整 `--notice=<sha256>` 的签核命令。
+
+### Changed
+
+- `prepare` 强制要求可解析且晚于当前时间的 `--due`。
+- `sign` 必须校验 Notice 文件、SM 首次作者、canonical 内容和命令摘要。
+- 旧 `notify` 命令停用，避免预览文本被误当成正式通知。
+
+### Fixed
+
+- 修复 SM 手工压缩角色范围、使用区间表达、补写过期截止时间后，错误通知仍能
+  驱动成员签核的问题。
+
 ## [0.10.3] - 2026-07-04
 
 ### Changed
