@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const TOOL_VERSION = "0.10.1";
+const TOOL_VERSION = "0.10.2";
 const ROLE_ALIASES = {
   po: "po", sm: "sm", tl: "tl",
   midbe: "midbe", "mid.be": "midbe", "mid.be/qa": "midbe",
@@ -145,6 +145,43 @@ function requireActor(options, expectedRole) {
 
 function relativeToRepo(context, file) {
   return path.relative(context.repo, file).split(path.sep).join("/");
+}
+
+function auditSourceChanges(context) {
+  const generatedDir = path.dirname(auditPath());
+  const generatedRelative = relativeToRepo(context, generatedDir);
+  const canIgnoreGenerated = generatedRelative
+    && generatedRelative !== "."
+    && !generatedRelative.startsWith("../");
+  const output = git(
+    context.repo,
+    ["-c", "core.quotepath=false", "status", "--porcelain=v1", "-z", "--untracked-files=all"],
+  ).stdout;
+  const fields = output.split("\0").filter(Boolean);
+  const changes = [];
+  for (let index = 0; index < fields.length; index += 1) {
+    const entry = fields[index];
+    const status = entry.slice(0, 2);
+    const changedPath = entry.slice(3).replaceAll("\\", "/");
+    if (status.includes("R") || status.includes("C")) index += 1;
+    if (canIgnoreGenerated
+      && (changedPath === generatedRelative
+        || changedPath.startsWith(`${generatedRelative}/`))) {
+      continue;
+    }
+    changes.push(`${status} ${changedPath}`);
+  }
+  return changes;
+}
+
+function ensureCleanAuditSource(context, operation) {
+  const changes = auditSourceChanges(context);
+  if (changes.length) {
+    fail(
+      `${operation} 要求可复现的干净事实源；请先提交或撤销以下工作区变化：\n`
+      + changes.join("\n"),
+    );
+  }
 }
 
 function ensureNoStagedChanges(context) {
@@ -299,6 +336,10 @@ function repoHead(context) {
   return git(context.repo, ["rev-parse", "HEAD"]).stdout.trim();
 }
 
+function repoTree(context) {
+  return git(context.repo, ["rev-parse", "HEAD^{tree}"]).stdout.trim();
+}
+
 function coverageIncludes(coverage, changeId, campaignTarget, auditBaseline) {
   if (coverage.includes(changeId)) return true;
   return coverage.some((item) => item.startsWith("BASELINE-"))
@@ -323,6 +364,7 @@ function missingCoverage(campaign, audit) {
 }
 
 function verifyCampaign(context, campaignId, print = true) {
+  ensureCleanAuditSource(context, "verify");
   const { data: campaign } = loadCampaign(context, campaignId);
   const audit = globalAuditOrFail(context);
   const missing = missingCoverage(campaign, audit);
@@ -407,6 +449,7 @@ function prepare(context, options) {
   requireActor(options, "sm");
   const sm = roleIdentity(context, "sm");
   withMutationLock(context, () => {
+    ensureCleanAuditSource(context, "prepare");
     const audit = globalAuditOrFail(context);
     let assignments;
     let target = String(options.target || "").trim();
@@ -452,6 +495,8 @@ function prepare(context, options) {
       auditSourceHead: audit.sourceHead || null,
       auditScopeHash: scopeHash(audit),
       repositoryHead: repoHead(context),
+      repositoryTree: repoTree(context),
+      auditSourceState: "clean",
       purpose: options.purpose || (options["from-audit"] ? "纠正全局签核缺口" : "确认受影响规范变更"),
       summary: options.summary || "按 Campaign 的逐角色范围完成阅读与签核。",
       readScope: splitValues(options.read || "本人角色卡;责任表;周期任务清单;角色行动手册指定变更章节"),
@@ -527,6 +572,7 @@ function close(context, options) {
   requireActor(options, "sm");
   const sm = roleIdentity(context, "sm");
   withMutationLock(context, () => {
+    ensureCleanAuditSource(context, "close");
     const campaignId = String(options.campaign || latestCampaignId(context));
     const status = evaluate(context, campaignId, true);
     if (!status.ready) fail("Campaign 局部审计未归零，拒绝关闭。");
@@ -564,13 +610,21 @@ function notify(context, options) {
       .join("；");
     fail(`拒绝生成通知，Campaign 少覆盖当前全局待处理：${detail}`);
   }
+  if (verification.campaign.scopeSource === "global-audit"
+    && !verification.exactSource) {
+    fail(
+      "拒绝生成通知：Campaign 审计指纹与当前事实源不一致；"
+      + "请由 SM 在干净工作区重新运行 prepare --from-audit 创建新批次。",
+    );
+  }
   const campaign = verification.campaign;
   console.log(`【签核通知｜${campaignId}｜${campaign.targetBaseline}｜${campaign.mode}】`);
   console.log(
     `生成依据：tool=${campaign.toolVersion || "legacy"}`
     + `｜scope=${campaign.scopeSource || "legacy"}`
     + `｜audit=${String(campaign.auditScopeHash || "none").slice(0, 12)}`
-    + `｜head=${String(campaign.repositoryHead || "none").slice(0, 12)}`,
+    + `｜head=${String(campaign.repositoryHead || "none").slice(0, 12)}`
+    + `｜tree=${String(campaign.repositoryTree || "none").slice(0, 12)}`,
   );
   if (campaign.sourceCampaignId) console.log(`来源：${campaign.sourceCampaignId}`);
   console.log(`目的：${campaign.purpose || "确认受影响规范变更"}`);

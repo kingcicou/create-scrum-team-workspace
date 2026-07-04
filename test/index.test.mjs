@@ -1150,17 +1150,17 @@ test("v0.9.6 detects cosigning and excludes anomalous coverage from verified", (
   }
 });
 
-test("v0.10.1 keeps release entrypoints pinned to the package version", () => {
+test("v0.10.2 keeps release entrypoints pinned to the package version", () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(packageDir, "package.json"), "utf8"));
   const read = (name) => fs.readFileSync(path.join(packageDir, name), "utf8");
-  assert.equal(pkg.version, "0.10.1");
-  assert.match(read("README.md"), /create-scrum-team-workspace#v0\.10\.1/);
+  assert.equal(pkg.version, "0.10.2");
+  assert.match(read("README.md"), /create-scrum-team-workspace#v0\.10\.2/);
   assert.doesNotMatch(read("README.md"), /create-scrum-team-workspace\/v0\.9\.[1589]\//);
-  assert.match(read("create.sh"), /SCRUM_TEMPLATE_REF:-v0\.10\.1/);
-  assert.match(read("create.ps1"), /else \{ "v0\.10\.1" \}/);
+  assert.match(read("create.sh"), /SCRUM_TEMPLATE_REF:-v0\.10\.2/);
+  assert.match(read("create.ps1"), /else \{ "v0\.10\.2" \}/);
 });
 
-test("v0.10.1 validates provenance, serializes writes, and enforces global closure", () => {
+test("v0.10.2 requires reproducible audit sources and enforces global closure", () => {
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-0100-"));
   const target = path.join(sandbox, "project");
   try {
@@ -1183,6 +1183,23 @@ test("v0.10.1 validates provenance, serializes writes, and enforces global closu
 
     git(repo, ["config", "--worktree", "user.name", "Shared Workspace"]);
     git(repo, ["config", "--worktree", "user.email", "shared@example.test"]);
+
+    const repoReadme = path.join(repo, "README.md");
+    const cleanReadme = fs.readFileSync(repoReadme, "utf8");
+    fs.appendFileSync(repoReadme, "\nlocal audit source drift\n", "utf8");
+    assert.throws(
+      () => runSignoff([
+        "prepare",
+        "--campaign=SIGN-DIRTY-001",
+        "--actor=sm",
+        "--target=V1.5",
+        "--roles=all",
+        "--coverage=BASELINE-V1.5",
+      ], { stdio: "pipe" }),
+      (error) => error.status === 2,
+    );
+    fs.writeFileSync(repoReadme, cleanReadme, "utf8");
+
     runSignoff([
       "prepare",
       "--campaign=SIGN-TEST-001",
@@ -1296,12 +1313,14 @@ test("v0.10.1 validates provenance, serializes writes, and enforces global closu
     const campaign = JSON.parse(fs.readFileSync(autoCampaign, "utf8"));
     assert.deepEqual(campaign.assignments.po.coverage, ["CHG-200"]);
     assert.equal(campaign.mode, "corrective");
-    assert.equal(campaign.toolVersion, "0.10.1");
+    assert.equal(campaign.toolVersion, "0.10.2");
     assert.equal(campaign.scopeSource, "global-audit");
+    assert.equal(campaign.auditSourceState, "clean");
     assert.match(campaign.auditScopeHash, /^[a-f0-9]{64}$/);
+    assert.match(campaign.repositoryTree, /^[a-f0-9]{40}$/);
     assert.match(
       runSignoff(["notify", "--campaign=SIGN-20260704-001"]),
-      /生成依据：tool=0\.10\.1.*无需、也禁止为签核反复修改 git user\.name\/user\.email/s,
+      /生成依据：tool=0\.10\.2.*tree=[a-f0-9]{12}.*无需、也禁止为签核反复修改 git user\.name\/user\.email/s,
     );
 
     const driftedManual = manual.replace(
@@ -1323,6 +1342,10 @@ test("v0.10.1 validates provenance, serializes writes, and enforces global closu
       /Verify: OK/,
     );
     runSignoff(["sign", "--campaign=SIGN-20260704-001", "--role=po"]);
+    assert.throws(
+      () => runSignoff(["notify", "--campaign=SIGN-20260704-001"], { stdio: "pipe" }),
+      (error) => error.status === 2,
+    );
     runSignoff(["close", "--campaign=SIGN-20260704-001", "--actor=sm"]);
   } finally {
     fs.rmSync(sandbox, { recursive: true, force: true });

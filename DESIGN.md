@@ -115,6 +115,8 @@ node index.mjs <project-name> \
 | --- | --- | --- | --- | --- |
 | 0.10.1 | 范围门禁前移到 prepare/notify/sign | SIGN-20260704-002 通知遗漏 Mid.BE 的 CHG-100，v0.10.0 只能在 close 阶段阻止 | A. 继续依赖人工复核；B. notify 前比较 Campaign 与全局审计；C. 三个入口都校验 | 选C；错误 Campaign 不提交、错误通知不输出、错误签核不执行 |
 | 0.10.1 | Campaign 保存生成来源证明 | 无法判断通知来自哪个工具版本、分支和审计快照 | A. 只打印版本；B. 保存 tool/head/audit/hash/scopeSource | 选B；通知打印短指纹，完整信息保存在 Campaign V3 |
+| 0.10.2 | 审计前要求干净事实源 | SIGN-20260704-003 在脏工作区生成，推送后同一 HEAD 无法复现范围 | A. 继续只记 HEAD；B. 检查工作区并记录 tree；C. 把未提交内容也打包 | 选B；事实先提交，生成索引除外，Campaign 保存 HEAD/tree/clean |
+| 0.10.2 | notify 要求全局审计指纹精确一致 | 仅检查“没有少覆盖”仍可能发送范围已变化的旧通知 | A. 允许多覆盖；B. 通知前 exact=yes，签核开始后 sign 仍按少覆盖门禁 | 选B；发通知采用严格快照，执行阶段允许范围自然收缩 |
 | 0.10.0 | 签核提交使用命令级身份与仓库互斥锁 | 团队共用单 worktree，连续修改 user.name/email 并在 54 秒内并发提交 | A. 继续人工改配置；B. 七套持久 worktree；C. `git -c` 身份+短事务锁 | 选C；不污染仓库配置、串行化签核写入；强身份认证仍交给平台/签名提交 |
 | 0.10.0 | Closure 从批次局部判断升级为项目全局门禁 | SIGN-20260704-001 的 7/7 CHG-160 有效，但全局仍有三人旧缺口 | A. 只看本批次；B. SM 人工比对；C. 机器审计 JSON+close 强制校验 | 选C；`prepare --from-audit` 生成逐角色 corrective，待处理非零不得关闭 |
 | 0.10.0 | 通知字段进入 Campaign V2 | v0.9.9 notify 缺目的、阅读范围、截止、回复和完整验收，SM 手工补写产生歧义 | A. 继续依赖模板；B. Campaign 保存结构化通知字段 | 选B；notify 成为可直接转发的事实输出 |

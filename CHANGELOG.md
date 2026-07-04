@@ -6,6 +6,23 @@
 
 ## [Unreleased]
 
+## [0.10.2] - 2026-07-04
+
+### Added
+
+- Campaign V3 新增 `repositoryTree` 与 `auditSourceState=clean`，补充可复现来源证明。
+- `prepare`、`verify`、`notify`、`sign`、`close` 在审计前检查工作区事实源。
+
+### Changed
+
+- 全局审计 Campaign 只有在 `auditScopeHash` 与当前范围完全一致时才允许生成通知。
+- 生成型文档索引可保持未提交，不影响事实源检查；其他已跟踪或未跟踪变化均会阻断审计操作。
+
+### Fixed
+
+- 修复脏工作区中的未提交事实可进入 Campaign 指纹、推送后无法在干净克隆复现的问题。
+- 修复 `verify` 显示 `exact=no` 时仍可生成一份过期或缩减范围通知的问题。
+
 ## [0.10.1] - 2026-07-04
 
 ### Added
