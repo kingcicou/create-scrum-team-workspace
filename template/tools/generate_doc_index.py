@@ -66,14 +66,15 @@ VALID_STATUSES = {"draft", "review", "approved", "locked"}
 
 
 def load_role_names():
-    """从 roles.config.json 读取角色显示名。返回 (names_set, role_to_person)。
+    """从 roles.config.json 读取角色显示名。返回姓名、角色映射、邮箱和配置。
     未生成（仍是占位符）或缺失时返回空。"""
     cfg = ROOT / "00_项目导航" / "roles.config.json"
-    names, r2p = set(), {}
+    names, r2p, emails, config = set(), {}, {}, {}
     try:
         data = json.loads(cfg.read_text(encoding="utf-8"))
+        config = data
     except (OSError, ValueError):
-        return names, r2p
+        return names, r2p, emails, config
 
     def walk(obj):
         if isinstance(obj, dict):
@@ -83,6 +84,8 @@ def load_role_names():
             rid = obj.get("id") or obj.get("role")
             if isinstance(rid, str) and isinstance(nm, str) and nm.strip():
                 r2p[rid.strip()] = nm.strip()
+                if isinstance(obj.get("email"), str):
+                    emails[rid.strip()] = obj["email"].strip()
             for v in obj.values():
                 walk(v)
         elif isinstance(obj, list):
@@ -90,10 +93,23 @@ def load_role_names():
                 walk(v)
 
     walk(data)
-    return names, r2p
+    for rid, name in data.get("roles", {}).items():
+        if isinstance(name, str):
+            names.add(name.strip())
+            r2p[rid] = name.strip()
+    for rid, email in data.get("emails", {}).items():
+        if isinstance(email, str):
+            emails[rid] = email.strip()
+    return names, r2p, emails, config
 
 
-KNOWN_PEOPLE, ROLE_TO_PERSON = load_role_names()
+KNOWN_PEOPLE, ROLE_TO_PERSON, ROLE_EMAILS, ROLE_CONFIG = load_role_names()
+SIGNOFF_REPO = (
+    ROOT / "10_代码仓库" / str(ROLE_CONFIG.get("repoName", ""))
+    if ROLE_CONFIG.get("gitRoot") == "repo"
+    else ROOT
+)
+SIGNOFF_STORE = SIGNOFF_REPO / ".team" / "signoffs"
 
 
 # ---------------------------------------------------------------------------
@@ -603,6 +619,96 @@ def _git_event_evidence(event_id, method, member=""):
     return "🟡 历史不可验证" if method == "unverified" else f"🟡 {method or '未指定'}"
 
 
+def _git_file_evidence(relative_path, member="", email=""):
+    """事件文件只允许一次创建提交；首次作者和邮箱必须匹配角色事实源。"""
+    rel = Path(relative_path).as_posix()
+    dirty = subprocess.run(
+        ["git", "-C", str(SIGNOFF_REPO), "status", "--porcelain", "--", rel],
+        capture_output=True, text=True, check=False,
+    )
+    if dirty.stdout.strip():
+        return f"🟡 待 Git 提交：{dirty.stdout.strip()}"
+    found = subprocess.run(
+        [
+            "git", "-C", str(SIGNOFF_REPO), "log",
+            "--format=%H%x1f%an%x1f%ae%x1f%aI", "--", rel,
+        ],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
+    )
+    history = [line for line in found.stdout.splitlines() if line.strip()]
+    if not history:
+        return "🟡 待 Git 提交"
+    if len(history) != 1:
+        return f"⚠️ 事件文件创建后被修改 {len(history) - 1} 次"
+    commit, author, author_email, authored = history[-1].split("\x1f", 3)
+    if member and author != member:
+        return f"⚠️ 首次作者 {author}，应为 {member}"
+    if email and author_email.lower() != email.lower():
+        return f"⚠️ 首次邮箱 {author_email}，应为 {email}"
+    return f"✅ {commit[:9]} · {author} <{author_email}> · {authored}"
+
+
+def _load_file_signoffs():
+    campaigns, events = [], []
+    campaign_dir = SIGNOFF_STORE / "campaigns"
+    closure_dir = SIGNOFF_STORE / "closures"
+    event_root = SIGNOFF_STORE / "events"
+    if campaign_dir.exists():
+        for file in sorted(campaign_dir.glob("*.json")):
+            try:
+                data = json.loads(file.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            closure = closure_dir / file.name
+            closure_evidence = ""
+            state = "open"
+            if closure.exists():
+                sm_name = ROLE_TO_PERSON.get("sm", "")
+                sm_email = ROLE_EMAILS.get("sm", "")
+                closure_evidence = _git_file_evidence(
+                    closure.relative_to(SIGNOFF_REPO), sm_name, sm_email
+                )
+                if closure_evidence.startswith("✅"):
+                    state = "closed"
+            assignments = data.get("assignments", {})
+            campaigns.append({
+                "Campaign ID": data.get("campaignId", file.stem),
+                "模式": data.get("mode", "incremental"),
+                "目标基线": data.get("targetBaseline", "?"),
+                "覆盖范围": ",".join(sorted({
+                    item for assignment in assignments.values()
+                    for item in assignment.get("coverage", [])
+                })),
+                "应签角色": ",".join(assignments.keys()),
+                "发起时间": data.get("createdAt", "—"),
+                "截止时间": data.get("dueAt", "由 SM 确认"),
+                "状态": state,
+                "关闭证据": closure_evidence or "—",
+                "_source": "event-file",
+            })
+    if event_root.exists():
+        for file in sorted(event_root.glob("*/*.json")):
+            try:
+                data = json.loads(file.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            events.append({
+                "Event ID": data.get("eventId", file.stem),
+                "Campaign ID": data.get("campaignId", file.parent.name),
+                "角色": data.get("role", ""),
+                "成员": data.get("member", ""),
+                "从基线": data.get("fromBaseline", "—"),
+                "目标基线": data.get("targetBaseline", "?"),
+                "覆盖 Change ID": ",".join(data.get("coverage", [])),
+                "签核时间": data.get("signedAt", "—"),
+                "证据方式": "event-file",
+                "结果/备注": data.get("result", "accepted"),
+                "_path": file.relative_to(SIGNOFF_REPO).as_posix(),
+                "_email": data.get("email", ""),
+            })
+    return campaigns, events
+
+
 def signoff_audit():
     """从变更、批次和追加式事件计算当前签核状态；兼容 v0.9.4 以前的快照表。"""
     charter = ROOT / "00_项目导航" / "11_角色行动手册.md"
@@ -613,6 +719,9 @@ def signoff_audit():
     cur = str(fm.get("version", "?"))
     roles = ("PO", "SM", "TL", "Mid.BE/QA", "Sr.FE/UX", "Mid.FE/QA", "FS/DevOps")
     aliases = {
+        "po": "PO", "sm": "SM", "tl": "TL",
+        "midbe": "Mid.BE/QA", "srfe": "Sr.FE/UX",
+        "midfe": "Mid.FE/QA", "fs": "FS/DevOps",
         "PO/PM": "PO",
         "TL/Sr.BE": "TL",
         "Mid.BE": "Mid.BE/QA",
@@ -633,6 +742,9 @@ def signoff_audit():
     changes = _table_rows(text, "Change ID")
     campaigns = _table_rows(text, "Campaign ID")
     event_rows = _table_rows(text, "Event ID")
+    file_campaigns, file_events = _load_file_signoffs()
+    campaigns.extend(file_campaigns)
+    event_rows.extend(file_events)
     if changes or event_rows or str(fm.get("signoff-model", "")).startswith("events"):
         change_map = {}
         for change in changes:
@@ -647,16 +759,30 @@ def signoff_audit():
         active = [
             campaign for campaign in campaigns
             if campaign.get("状态", "").lower() in ("open", "active", "进行中")
+            or (
+                not file_campaigns
+                and campaign.get("状态", "").lower() in ("planned", "待创建")
+            )
         ]
-        active.sort(key=lambda item: _version_key(item.get("目标基线", "")), reverse=True)
-        campaign = active[0] if active else None
+        campaign = (
+            max(
+                enumerate(active),
+                key=lambda pair: (_version_key(pair[1].get("目标基线", "")), pair[0]),
+            )[1]
+            if active else None
+        )
         closed = [
             item for item in campaigns
             if item.get("状态", "").lower() in ("closed", "关闭", "已关闭")
             and _version_key(item.get("目标基线", "")) >= _version_key(cur)
         ]
-        closed.sort(key=lambda item: _version_key(item.get("目标基线", "")), reverse=True)
-        closed_campaign = closed[0].get("Campaign ID", "") if closed else ""
+        closed_campaign = (
+            max(
+                enumerate(closed),
+                key=lambda pair: (_version_key(pair[1].get("目标基线", "")), pair[0]),
+            )[1].get("Campaign ID", "")
+            if closed else ""
+        )
         scope = []
         if campaign:
             raw_scope = {canonical(role) for role in _split_values(campaign.get("应签角色", ""))}
@@ -667,10 +793,18 @@ def signoff_audit():
         for event in event_rows:
             role = canonical(event.get("角色", ""))
             result = event.get("结果/备注", "")
-            evidence = _git_event_evidence(
-                event.get("Event ID", ""),
-                event.get("证据方式", ""),
-                event.get("成员", ""),
+            evidence = (
+                _git_file_evidence(
+                    event.get("_path", ""),
+                    event.get("成员", ""),
+                    event.get("_email", ""),
+                )
+                if event.get("证据方式") == "event-file"
+                else _git_event_evidence(
+                    event.get("Event ID", ""),
+                    event.get("证据方式", ""),
+                    event.get("成员", ""),
+                )
             )
             rendered_events.append((
                 event.get("Event ID", "—"),

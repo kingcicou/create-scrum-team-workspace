@@ -6,6 +6,26 @@
 
 ## [Unreleased]
 
+## [0.9.9] - 2026-07-04
+
+### Added
+
+- 新增 `tools/signoff.mjs`：SM `prepare/close`、成员 `sign`、全员 `status/notify`。
+- Campaign、Event、Closure 改为 `.team/signoffs/` 下的独立 JSON 文件；成员
+  assignment、姓名、邮箱、日期和覆盖范围由工具生成。
+- 回归测试覆盖身份错误、非 SM 关闭、待处理关闭、他人预铺后空格洗白及有效补签。
+
+### Changed
+
+- 手册旧事件表降为只读兼容；新 Event 文件只允许一次创建提交，首次作者和邮箱
+  必须匹配 `roles.config.json`。
+- 签核机制升级登记为全员新基线变化；纠偏批次应同时覆盖旧缺口和新规则。
+
+### Fixed
+
+- 修复通知统一示例造成 Change ID 覆盖不足、共享表并发覆盖、当前 blame 可被
+  空格修改洗白、非 SM 错误关闭及同基线 closed Campaign 选择错误。
+
 ## [0.9.8] - 2026-07-04
 
 ### Fixed

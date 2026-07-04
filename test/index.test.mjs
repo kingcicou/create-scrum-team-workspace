@@ -870,12 +870,12 @@ test("v0.9.3 keeps signoff orchestration with SM and normalizes role scope", () 
 
     roleManual = roleManual
       .replace(
-        /\| CHG-100 \| V1\.4 \| [^|]+ \| 首版；含关闭同步、变化触发式 CI、签核编排、纠偏批次与事件模型 \| ALL \|/,
-        "| CHG-100 | V1.4 | 2026-07-03 | 别名匹配验证 | SM,FS |",
+        /\| CHG-100 \| V1\.5 \| [^|]+ \| 首版；含关闭同步、变化触发式 CI、签核编排、纠偏批次与独立事件文件模型 \| ALL \|/,
+        "| CHG-100 | V1.5 | 2026-07-03 | 别名匹配验证 | SM,FS |",
       )
       .replace(
-        /\| SIGN-INIT-001 \| initial \| V1\.4 \| CHG-100 \| ALL \| [^|]+ \| 由 SM 确认 \| open \| — \|/,
-        "| SIGN-ALIAS-001 | incremental | V1.4 | CHG-100 | SM,FS | 2026-07-03 | 2026-07-04 | open | — |",
+        /\| SIGN-INIT-001 \| initial \| V1\.5 \| BASELINE-V1\.5 \| ALL \| [^|]+ \| 由 SM 确认 \| planned \| 由 SM 运行 signoff prepare \|/,
+        "| SIGN-ALIAS-001 | incremental | V1.5 | CHG-100 | SM,FS | 2026-07-03 | 2026-07-04 | open | — |",
       );
     fs.writeFileSync(manualPath, roleManual, "utf8");
 
@@ -962,15 +962,16 @@ test("v0.9.5 traces catch-up coverage and keeps rebaseline history honest", () =
     const manualPath = path.join(nav, "11_角色行动手册.md");
     let manual = fs.readFileSync(manualPath, "utf8");
     manual = manual
+      .replace("version: 1.5", "version: 1.4")
       .replace(
-        /\| CHG-100 \| V1\.4 \| [^|]+ \| 首版；含关闭同步、变化触发式 CI、签核编排、纠偏批次与事件模型 \| ALL \|/,
+        /\| CHG-100 \| V1\.5 \| [^|]+ \| 首版；含关闭同步、变化触发式 CI、签核编排、纠偏批次与独立事件文件模型 \| ALL \|/,
         `| CHG-100 | V1.0 | 2026-07-01 | 首版 | FS/DevOps |
 | CHG-120 | V1.2 | 2026-07-02 | CI 变化触发 | FS |
 | CHG-130 | V1.3 | 2026-07-02 | SM 编排 | SM |
 | CHG-140 | V1.4 | 2026-07-03 | CI 证据契约 | FS/DevOps |`,
       )
       .replace(
-        /\| SIGN-INIT-001 \| initial \| V1\.4 \| CHG-100 \| ALL \| [^|]+ \| 由 SM 确认 \| open \| — \|/,
+        /\| SIGN-INIT-001 \| initial \| V1\.5 \| BASELINE-V1\.5 \| ALL \| [^|]+ \| 由 SM 确认 \| planned \| 由 SM 运行 signoff prepare \|/,
         "| SIGN-CATCHUP-001 | catch-up | V1.4 | CHG-120,CHG-140 | FS | 2026-07-03 | 2026-07-04 | open | — |",
       )
       .replace(
@@ -1065,14 +1066,13 @@ test("v0.9.6 detects cosigning and excludes anomalous coverage from verified", (
     const manualPath = path.join(nav, "11_角色行动手册.md");
     let manual = fs.readFileSync(manualPath, "utf8");
     manual = manual
-      .replace("version: 1.4", "version: 1.5")
       .replace(
-        /\| CHG-100 \| V1\.4 \| [^|]+ \| 首版；含关闭同步、变化触发式 CI、签核编排、纠偏批次与事件模型 \| ALL \|/,
+        /\| CHG-100 \| V1\.5 \| [^|]+ \| 首版；含关闭同步、变化触发式 CI、签核编排、纠偏批次与独立事件文件模型 \| ALL \|/,
         `| CHG-100 | V1.0 | 2026-07-01 | 首版 | FS/DevOps |
 | CHG-200 | V1.2 | 2026-07-02 | CI 变化触发 | FS/DevOps |`,
       )
       .replace(
-        /\| SIGN-INIT-001 \| initial \| V1\.4 \| CHG-100 \| ALL \| [^|]+ \| 由 SM 确认 \| open \| — \|/,
+        /\| SIGN-INIT-001 \| initial \| V1\.5 \| BASELINE-V1\.5 \| ALL \| [^|]+ \| 由 SM 确认 \| planned \| 由 SM 运行 signoff prepare \|/,
         "| SIGN-096-001 | incremental | V1.5 | CHG-100,CHG-200 | FS | 2026-07-03 | 2026-07-04 | open | — |",
       )
       .replace(
@@ -1150,12 +1150,119 @@ test("v0.9.6 detects cosigning and excludes anomalous coverage from verified", (
   }
 });
 
-test("v0.9.8 keeps release entrypoints pinned to the package version", () => {
+test("v0.9.9 keeps release entrypoints pinned to the package version", () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(packageDir, "package.json"), "utf8"));
   const read = (name) => fs.readFileSync(path.join(packageDir, name), "utf8");
-  assert.equal(pkg.version, "0.9.8");
-  assert.match(read("README.md"), /create-scrum-team-workspace#v0\.9\.8/);
-  assert.doesNotMatch(read("README.md"), /create-scrum-team-workspace\/v0\.9\.[15]\//);
-  assert.match(read("create.sh"), /SCRUM_TEMPLATE_REF:-v0\.9\.8/);
-  assert.match(read("create.ps1"), /else \{ "v0\.9\.8" \}/);
+  assert.equal(pkg.version, "0.9.9");
+  assert.match(read("README.md"), /create-scrum-team-workspace#v0\.9\.9/);
+  assert.doesNotMatch(read("README.md"), /create-scrum-team-workspace\/v0\.9\.[158]\//);
+  assert.match(read("create.sh"), /SCRUM_TEMPLATE_REF:-v0\.9\.9/);
+  assert.match(read("create.ps1"), /else \{ "v0\.9\.9" \}/);
+});
+
+test("v0.9.9 signs immutable event files and enforces SM closure", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-099-"));
+  const target = path.join(sandbox, "project");
+  try {
+    runCli([
+      target,
+      "--repo=event-app",
+      "--git-root=workspace",
+      "--no-worktrees",
+    ]);
+    const config = JSON.parse(
+      fs.readFileSync(path.join(target, "00_项目导航", "roles.config.json"), "utf8"),
+    );
+    const tool = path.join(target, "tools", "signoff.mjs");
+    const setRole = (id) => {
+      git(target, ["config", "--worktree", "user.name", config.roles[id]]);
+      git(target, ["config", "--worktree", "user.email", config.emails[id]]);
+    };
+    const runSignoff = (args, options = {}) =>
+      execFileSync(process.execPath, [tool, ...args], {
+        cwd: target,
+        encoding: "utf8",
+        ...options,
+      });
+
+    setRole("sm");
+    runSignoff([
+      "prepare",
+      "--campaign=SIGN-TEST-001",
+      "--target=V1.5",
+      "--mode=corrective",
+      "--roles=all",
+      "--coverage=BASELINE-V1.5",
+    ]);
+    assert.throws(
+      () => runSignoff(["sign", "--campaign=SIGN-TEST-001", "--role=po"], { stdio: "pipe" }),
+      (error) => error.status === 2,
+    );
+
+    for (const id of ["po", "sm", "tl", "midbe", "srfe", "midfe", "fs"]) {
+      setRole(id);
+      runSignoff(["sign", "--campaign=SIGN-TEST-001", `--role=${id}`]);
+    }
+    setRole("po");
+    assert.throws(
+      () => runSignoff(["close", "--campaign=SIGN-TEST-001"], { stdio: "pipe" }),
+      (error) => error.status === 2,
+    );
+    setRole("sm");
+    assert.match(
+      runSignoff(["status", "--campaign=SIGN-TEST-001"]),
+      /Closure: OPEN/,
+    );
+    runSignoff(["close", "--campaign=SIGN-TEST-001"]);
+    assert.match(
+      runSignoff(["status", "--campaign=SIGN-TEST-001"]),
+      /Closure: CLOSED/,
+    );
+
+    runSignoff([
+      "prepare",
+      "--campaign=SIGN-TEST-002",
+      "--target=V1.5",
+      "--mode=corrective",
+      "--roles=po",
+      "--coverage=BASELINE-V1.5",
+      "--source=SIGN-TEST-001",
+    ]);
+    const badDir = path.join(target, ".team", "signoffs", "events", "SIGN-TEST-002");
+    const badFile = path.join(badDir, "EVT-PO-BAD.json");
+    fs.mkdirSync(badDir, { recursive: true });
+    fs.writeFileSync(
+      badFile,
+      `${JSON.stringify({
+        schemaVersion: 1,
+        eventId: "EVT-PO-BAD",
+        campaignId: "SIGN-TEST-002",
+        role: "po",
+        member: config.roles.po,
+        email: config.emails.po,
+        targetBaseline: "V1.5",
+        coverage: ["BASELINE-V1.5"],
+        signedAt: "2026-07-04",
+        result: "accepted",
+      }, null, 2)}\n`,
+      "utf8",
+    );
+    git(target, ["add", path.relative(target, badFile)]);
+    git(target, ["commit", "-m", "test: SM prelays PO event"]);
+    setRole("po");
+    fs.appendFileSync(badFile, "\n", "utf8");
+    git(target, ["add", path.relative(target, badFile)]);
+    git(target, ["commit", "-m", "test: PO whitespace cannot claim event"]);
+    assert.throws(
+      () => runSignoff(["status", "--campaign=SIGN-TEST-002"], { stdio: "pipe" }),
+      (error) => error.status === 2,
+    );
+    runSignoff(["sign", "--campaign=SIGN-TEST-002", "--role=po"]);
+    assert.match(
+      runSignoff(["status", "--campaign=SIGN-TEST-002"]),
+      /po .*: VALID/,
+    );
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
 });
