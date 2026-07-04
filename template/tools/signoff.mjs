@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const TOOL_VERSION = "0.10.2";
+const TOOL_VERSION = "0.10.3";
 const ROLE_ALIASES = {
   po: "po", sm: "sm", tl: "tl",
   midbe: "midbe", "mid.be": "midbe", "mid.be/qa": "midbe",

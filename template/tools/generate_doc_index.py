@@ -599,14 +599,18 @@ def _split_values(value):
 
 
 def _git_event_evidence(event_id, method, member=""):
-    """验证 legacy commit，或用 blame 定位 Event ID 当前行的真实作者。"""
+    """验证可从 HEAD 追溯的 legacy commit，或定位 Event ID 当前行作者。"""
     if method.startswith("legacy:"):
         ref = method.split(":", 1)[1].strip()
         check = subprocess.run(
-            ["git", "-C", str(ROOT), "cat-file", "-e", f"{ref}^{{commit}}"],
+            ["git", "-C", str(ROOT), "merge-base", "--is-ancestor", ref, "HEAD"],
             capture_output=True, text=True, check=False,
         )
-        return f"✅ {ref}" if check.returncode == 0 else f"⚠️ 无效 legacy:{ref}"
+        return (
+            f"✅ {ref}"
+            if check.returncode == 0
+            else f"⚠️ 无效 legacy:{ref}（不可从 HEAD 追溯）"
+        )
     if method == "auto":
         # 用 blame 定位签核行的当前作者，而非 pickaxe -S 的首现提交：
         # 后者会把预先脚手架铺好的空行归因给铺行者，无法反映真实签核人，

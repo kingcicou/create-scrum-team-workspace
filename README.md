@@ -11,19 +11,19 @@
 ### 方式一：Bash 一键执行（macOS / Linux / WSL / Git Bash）
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.10.2/create.sh) my-project
+bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.10.3/create.sh) my-project
 ```
 
 可叠加任意 CLI 选项：
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.10.2/create.sh) my-project --type=new --preset=tech
+bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.10.3/create.sh) my-project --type=new --preset=tech
 ```
 
 ### 方式二：PowerShell 一键执行（Windows）
 
 ```powershell
-irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.10.2/create.ps1 | iex
+irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.10.3/create.ps1 | iex
 ```
 
 执行后会进入交互式创建。也可提前设环境变量传项目名与额外参数：
@@ -31,20 +31,20 @@ irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.1
 ```powershell
 $env:PROJECT_NAME="my-project"
 $env:SCRUM_TEMPLATE_ARGS="--type=new --preset=tech"
-irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.10.2/create.ps1 | iex
+irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.10.3/create.ps1 | iex
 ```
 
 ### 方式三：npx（全平台，需 Node.js >= 18）
 
 ```bash
 # 直接从 GitHub 执行（推荐，与参考仓库一致）
-npx -y github:kingcicou/create-scrum-team-workspace#v0.10.2 my-project
+npx -y github:kingcicou/create-scrum-team-workspace#v0.10.3 my-project
 
 # 仅预览不写盘
-npx -y github:kingcicou/create-scrum-team-workspace#v0.10.2 my-project --dry-run
+npx -y github:kingcicou/create-scrum-team-workspace#v0.10.3 my-project --dry-run
 
 # 交互式
-npx -y github:kingcicou/create-scrum-team-workspace#v0.10.2 --interactive
+npx -y github:kingcicou/create-scrum-team-workspace#v0.10.3 --interactive
 ```
 
 > 未发布到 npm registry，请使用 `github:` 前缀。

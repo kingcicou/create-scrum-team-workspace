@@ -1104,7 +1104,25 @@ test("v0.9.6 detects cosigning and excludes anomalous coverage from verified", (
     assert.match(fsStateLine(audit), /待重签（疑似代签\/无效）：.*CHG-100/);
     assert.doesNotMatch(fsStateLine(audit), /^\| FS\/DevOps \|.*✅ 当前有效/);
 
-    // 场景 3：批次被提前关闭时必须报告事实冲突并要求 corrective。
+    // 场景 3：对象库中存在但不可从 HEAD 追溯的 legacy commit 不得算有效证据。
+    const tree = git(target, ["rev-parse", "HEAD^{tree}"]).trim();
+    const dangling = git(target, ["commit-tree", tree, "-m", "dangling legacy evidence"]).trim();
+    const danglingRow =
+      `| EVT-FS-DANGLING | SIGN-096-001 | FS/DevOps | Atlas | V1.0 | V1.2 | CHG-200 | 2026-07-03 | legacy:${dangling} | accepted |`;
+    manual = fs.readFileSync(manualPath, "utf8").replace(
+      "| EVT-FS-001 | SIGN-096-001 | FS/DevOps | Atlas | V1.0 | V1.0 | CHG-100 | 2026-07-03 | auto | accepted |",
+      `| EVT-FS-001 | SIGN-096-001 | FS/DevOps | Atlas | V1.0 | V1.0 | CHG-100 | 2026-07-03 | auto | accepted |
+${danglingRow}`,
+    );
+    fs.writeFileSync(manualPath, manual, "utf8");
+    runGen();
+    audit = readAudit();
+    assert.match(audit, /EVT-FS-DANGLING \|.*不可从 HEAD 追溯/);
+    assert.match(fsStateLine(audit), /待重签（疑似代签\/无效）：.*CHG-200/);
+    manual = fs.readFileSync(manualPath, "utf8").replace(`\n${danglingRow}`, "");
+    fs.writeFileSync(manualPath, manual, "utf8");
+
+    // 场景 4：批次被提前关闭时必须报告事实冲突并要求 corrective。
     manual = fs.readFileSync(manualPath, "utf8").replace(
       "| SIGN-096-001 | incremental | V1.5 | CHG-100,CHG-200 | FS | 2026-07-03 | 2026-07-04 | open | — |",
       "| SIGN-096-001 | incremental | V1.5 | CHG-100,CHG-200 | FS | 2026-07-03 | 2026-07-04 | closed | premature |",
@@ -1120,7 +1138,7 @@ test("v0.9.6 detects cosigning and excludes anomalous coverage from verified", (
     );
     fs.writeFileSync(manualPath, manual, "utf8");
 
-    // 场景 4：未提交的新事件不计覆盖，必须显示待提交/验证。
+    // 场景 5：未提交的新事件不计覆盖，必须显示待提交/验证。
     manual = fs.readFileSync(manualPath, "utf8").replace(
       "| EVT-FS-001 | SIGN-096-001 | FS/DevOps | Atlas | V1.0 | V1.0 | CHG-100 | 2026-07-03 | auto | accepted |",
       `| EVT-FS-001 | SIGN-096-001 | FS/DevOps | Atlas | V1.0 | V1.0 | CHG-100 | 2026-07-03 | auto | accepted |
@@ -1132,7 +1150,7 @@ test("v0.9.6 detects cosigning and excludes anomalous coverage from verified", (
     assert.match(audit, /EVT-FS-002 \|.*🟡 待 Git 提交/);
     assert.match(fsStateLine(audit), /待提交\/验证：.*CHG-200/);
 
-    // 场景 5：本人（Atlas）提交补签 CHG-100 与 CHG-200 → 从待重签转为当前有效
+    // 场景 6：本人（Atlas）提交补签 CHG-100 与 CHG-200 → 从待重签转为当前有效
     manual = fs.readFileSync(manualPath, "utf8").replace(
       "| EVT-FS-002 | SIGN-096-001 | FS/DevOps | Atlas | V1.0 | V1.2 | CHG-200 | 2026-07-03 | auto | accepted |",
       `| EVT-FS-002 | SIGN-096-001 | FS/DevOps | Atlas | V1.0 | V1.2 | CHG-200 | 2026-07-03 | auto | accepted |
@@ -1150,17 +1168,17 @@ test("v0.9.6 detects cosigning and excludes anomalous coverage from verified", (
   }
 });
 
-test("v0.10.2 keeps release entrypoints pinned to the package version", () => {
+test("v0.10.3 keeps release entrypoints pinned to the package version", () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(packageDir, "package.json"), "utf8"));
   const read = (name) => fs.readFileSync(path.join(packageDir, name), "utf8");
-  assert.equal(pkg.version, "0.10.2");
-  assert.match(read("README.md"), /create-scrum-team-workspace#v0\.10\.2/);
+  assert.equal(pkg.version, "0.10.3");
+  assert.match(read("README.md"), /create-scrum-team-workspace#v0\.10\.3/);
   assert.doesNotMatch(read("README.md"), /create-scrum-team-workspace\/v0\.9\.[1589]\//);
-  assert.match(read("create.sh"), /SCRUM_TEMPLATE_REF:-v0\.10\.2/);
-  assert.match(read("create.ps1"), /else \{ "v0\.10\.2" \}/);
+  assert.match(read("create.sh"), /SCRUM_TEMPLATE_REF:-v0\.10\.3/);
+  assert.match(read("create.ps1"), /else \{ "v0\.10\.3" \}/);
 });
 
-test("v0.10.2 requires reproducible audit sources and enforces global closure", () => {
+test("v0.10.3 requires reproducible audit sources and enforces global closure", () => {
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-0100-"));
   const target = path.join(sandbox, "project");
   try {
@@ -1313,14 +1331,14 @@ test("v0.10.2 requires reproducible audit sources and enforces global closure", 
     const campaign = JSON.parse(fs.readFileSync(autoCampaign, "utf8"));
     assert.deepEqual(campaign.assignments.po.coverage, ["CHG-200"]);
     assert.equal(campaign.mode, "corrective");
-    assert.equal(campaign.toolVersion, "0.10.2");
+    assert.equal(campaign.toolVersion, "0.10.3");
     assert.equal(campaign.scopeSource, "global-audit");
     assert.equal(campaign.auditSourceState, "clean");
     assert.match(campaign.auditScopeHash, /^[a-f0-9]{64}$/);
     assert.match(campaign.repositoryTree, /^[a-f0-9]{40}$/);
     assert.match(
       runSignoff(["notify", "--campaign=SIGN-20260704-001"]),
-      /生成依据：tool=0\.10\.2.*tree=[a-f0-9]{12}.*无需、也禁止为签核反复修改 git user\.name\/user\.email/s,
+      /生成依据：tool=0\.10\.3.*tree=[a-f0-9]{12}.*无需、也禁止为签核反复修改 git user\.name\/user\.email/s,
     );
 
     const driftedManual = manual.replace(
