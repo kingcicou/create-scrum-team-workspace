@@ -7,7 +7,14 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const TOOL_VERSION = "0.10.4";
+const TOOL_VERSION = "{{TOOL_VERSION}}";
+// 影响全局审计“含义”的输入：变更定义、角色事实源、审计工具。
+// publish 时固化其指纹，sign 时用 Node 重算比对（无需 Python）。
+const AUDIT_INPUT_PATHS = [
+  "00_项目导航/11_角色行动手册.md",
+  "00_项目导航/roles.config.json",
+  "tools/generate_doc_index.py",
+];
 const ROLE_ALIASES = {
   po: "po", sm: "sm", tl: "tl",
   midbe: "midbe", "mid.be": "midbe", "mid.be/qa": "midbe",
@@ -63,7 +70,7 @@ function compactDate(value) {
   return value.replaceAll("-", "");
 }
 
-function validateDue(value, timezone) {
+function parseDue(value, timezone) {
   const due = String(value || "").trim();
   if (!due) fail("prepare 必须提供 --due=<未来时间>，不得使用待确认或群聊补写。");
   let instant;
@@ -79,6 +86,11 @@ function validateDue(value, timezone) {
     instant = Date.parse(due);
   }
   if (!Number.isFinite(instant)) fail(`无法解析截止时间：${due}`);
+  return { due, instant };
+}
+
+function validateDue(value, timezone) {
+  const { due, instant } = parseDue(value, timezone);
   if (instant <= Date.now()) fail(`截止时间必须晚于当前时间：${due}`);
   return due;
 }
@@ -390,7 +402,7 @@ function noticeDigest(campaign) {
 function renderNotice(context, campaign, digest) {
   const lines = [
     `【签核通知｜${campaign.campaignId}｜${campaign.targetBaseline}｜${campaign.mode}】`,
-    `通知凭证：sha256=${digest}`,
+    `Notice 一致性摘要：sha256=${digest}（非秘密·可重算·仅防批次漂移，不是身份认证或阅读证明）`,
     `生成依据：tool=${campaign.toolVersion || "legacy"}`
       + `｜scope=${campaign.scopeSource || "legacy"}`
       + `｜audit=${String(campaign.auditScopeHash || "none").slice(0, 12)}`
@@ -403,7 +415,7 @@ function renderNotice(context, campaign, digest) {
   lines.push(`阅读范围：${(campaign.readScope || []).join("；") || "由 SM 指定"}`);
   lines.push(`截止：${campaign.dueAt}（${campaign.timezone}）`);
   lines.push("身份：无需、也禁止为签核反复修改 git user.name/user.email；命令仅对本次提交使用角色事实源。");
-  lines.push("执行：只运行本人下方完整命令；缺少或修改 --notice 时工具拒绝签核。");
+  lines.push("执行：只运行本人下方完整命令；--notice 是一致性摘要（非秘密、非身份认证、非阅读证明），缺失或与批次不符时工具拒绝签核。");
   for (const [roleId, assignment] of Object.entries(campaign.assignments || {})) {
     const role = context.roles[roleId];
     lines.push(`@${role.name} (${roleId})：覆盖 ${assignment.coverage.join(",")}`);
@@ -442,6 +454,56 @@ function missingCoverage(campaign, audit) {
     if (absent.length) missing.push({ roleId, coverage: absent });
   }
   return missing;
+}
+
+function computeAuditInputHash() {
+  const hash = crypto.createHash("sha256");
+  for (const rel of AUDIT_INPUT_PATHS) {
+    const file = path.join(PROJECT_ROOT, rel);
+    hash.update(rel);
+    hash.update("\0");
+    hash.update(fs.existsSync(file) ? fs.readFileSync(file) : Buffer.from("MISSING"));
+    hash.update("\0");
+  }
+  return hash.digest("hex");
+}
+
+// sign 阶段的三级漂移判断（无 Python）：
+// - 审计输入漂移（手册/配置/工具变化）→ 拒绝，要求 SM 重建 Campaign
+// - 代码漂移（非 .team/signoffs 路径）→ 仅提示，不阻断
+// - 正常漂移（仅签核工件）→ 放行；close 仍跑 Python 做实时全局审计
+function verifyFrozen(context, campaign, snapshot) {
+  const currentInputHash = computeAuditInputHash();
+  if (snapshot.inputHash && currentInputHash !== snapshot.inputHash) {
+    fail(
+      "审计输入已变化（角色手册/角色配置/审计工具），Notice 快照失效；"
+      + "请由 SM 在干净事实源重新运行 prepare --from-audit 与 publish 创建新批次。",
+    );
+  }
+  const frozenAudit = {
+    currentBaseline: snapshot.currentBaseline,
+    pendingAssignments: snapshot.pendingAssignments || {},
+  };
+  const missing = missingCoverage(campaign, frozenAudit);
+  if (missing.length) {
+    const detail = missing.map((item) => `${item.roleId}:${item.coverage.join(",")}`).join("；");
+    fail(`Campaign 未覆盖 Notice 快照中的全局待处理：${detail}。请由 SM 重建纠偏批次。`);
+  }
+  const base = campaign.repositoryHead;
+  if (base) {
+    const head = repoHead(context);
+    if (head !== base) {
+      const output = git(context.repo, ["diff", "--name-only", base, head], true).stdout || "";
+      const changed = output.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+      const codeDrift = changed.filter((item) => !item.startsWith(".team/signoffs/"));
+      if (codeDrift.length) {
+        console.warn(
+          `[WARN] 自 Campaign 发布以来有 ${codeDrift.length} 处非签核改动（代码漂移，不阻断签核）：`,
+        );
+        for (const item of codeDrift.slice(0, 8)) console.warn(`  ~ ${item}`);
+      }
+    }
+  }
 }
 
 function verifyCampaign(context, campaignId, print = true) {
@@ -532,7 +594,11 @@ function prepare(context, options) {
   withMutationLock(context, () => {
     ensureCleanAuditSource(context, "prepare");
     const timezone = String(options.timezone || "Asia/Shanghai");
-    const dueAt = validateDue(options.due, timezone);
+    const dueMode = options["due-mode"] === "hard" ? "hard" : "advisory";
+    // hard 模式强制未来截止；advisory 为非约束提示，允许追追/历史截止。
+    const dueAt = dueMode === "hard"
+      ? validateDue(options.due, timezone)
+      : parseDue(options.due, timezone).due;
     const audit = globalAuditOrFail(context);
     let assignments;
     let target = String(options.target || "").trim();
@@ -567,10 +633,11 @@ function prepare(context, options) {
     const file = campaignPath(context, campaignId);
     if (fs.existsSync(file)) fail(`Campaign 已存在：${campaignId}`);
     const campaign = {
-      schemaVersion: 3,
+      schemaVersion: 4,
       toolVersion: TOOL_VERSION,
       campaignId,
       mode,
+      dueMode,
       targetBaseline: target,
       sourceCampaignId: source,
       scopeSource: options["from-audit"] ? "global-audit" : "explicit",
@@ -611,13 +678,14 @@ function sign(context, options) {
   withMutationLock(context, () => {
     const campaignId = String(options.campaign || latestCampaignId(context));
     const { data: campaign } = loadCampaign(context, campaignId);
-    validateDue(campaign.dueAt, campaign.timezone);
+    const { instant: dueInstant } = parseDue(campaign.dueAt, campaign.timezone);
+    const late = Date.now() > dueInstant;
+    const lateBySeconds = late ? Math.round((Date.now() - dueInstant) / 1000) : 0;
+    if (late && campaign.dueMode === "hard") {
+      fail(`Campaign 为 hard 截止模式且已过期（${campaign.dueAt}），拒绝签核；请由 SM 重建批次。`);
+    }
     const assignment = campaign.assignments?.[roleId];
     if (!assignment) fail(`Campaign ${campaignId} 未分配角色 ${roleId}。`);
-    const verification = verifyCampaign(context, campaignId, false);
-    if (!verification.ok) {
-      fail("Campaign 未覆盖当前全局待处理，拒绝签核；请由 SM 运行 verify 并新建纠偏批次。");
-    }
     const campaignEvidence = introduction(context, campaignPath(context, campaignId), context.roles.sm);
     if (!campaignEvidence.ok) fail(`Campaign 尚未由 SM 有效提交：${campaignEvidence.detail}`);
     const noticeFile = noticePath(context, campaignId);
@@ -633,6 +701,16 @@ function sign(context, options) {
     if (JSON.stringify(notice.content) !== JSON.stringify(renderNotice(context, campaign, digest))) {
       fail("Notice 内容与 Campaign 不一致，拒绝签核。");
     }
+    // 覆盖与漂移校验：优先用 Notice 已发布快照（Node/Git，无需 Python）；
+    // 旧 Notice 无快照时回落到实时全局审计（Python）。
+    if (notice.auditSnapshot) {
+      verifyFrozen(context, campaign, notice.auditSnapshot);
+    } else {
+      const verification = verifyCampaign(context, campaignId, false);
+      if (!verification.ok) {
+        fail("Campaign 未覆盖当前全局待处理，拒绝签核；请由 SM 运行 verify 并新建纠偏批次。");
+      }
+    }
     if (fs.existsSync(closurePath(context, campaignId))) fail(`Campaign 已存在 closure，拒绝继续签核：${campaignId}`);
 
     const existing = eventFiles(context, campaignId);
@@ -645,7 +723,7 @@ function sign(context, options) {
     const file = path.join(eventDir(context, campaignId), `${eventId}.json`);
     if (fs.existsSync(file)) fail(`Event 已存在：${eventId}`);
     writeJson(file, {
-      schemaVersion: 2,
+      schemaVersion: 3,
       eventId,
       campaignId,
       role: roleId,
@@ -654,6 +732,10 @@ function sign(context, options) {
       targetBaseline: campaign.targetBaseline,
       coverage: assignment.coverage,
       signedAt: localDate(),
+      dueAt: campaign.dueAt,
+      dueMode: campaign.dueMode || "advisory",
+      late,
+      lateBySeconds,
       identityMode: "command-scoped",
       noticeDigest: digest,
       result: "accepted",
@@ -661,6 +743,12 @@ function sign(context, options) {
     commitOnly(context, file, `sign(${roleId}): ${eventId} · ${campaignId}`, member);
     const evidence = introduction(context, file, member);
     if (!evidence.ok) fail(`Event 提交后校验失败：${evidence.detail}`);
+    if (late) {
+      console.warn(
+        `[WARN] 逾期签核：截止 ${campaign.dueAt}，迟 ${Math.round(lateBySeconds / 60)} 分钟`
+        + "（advisory 模式，已在 Event 记录 late=true 与迟到时长）。",
+      );
+    }
     console.log(`[OK] ${eventId} · ${member.name} · ${assignment.coverage.join(",")} · ${evidence.detail}`);
     console.log("[INFO] 未修改仓库 user.name/user.email；身份仅作用于本次提交。");
   });
@@ -719,17 +807,28 @@ function publish(context, options) {
     );
   }
   const campaign = verification.campaign;
-  validateDue(campaign.dueAt, campaign.timezone);
+  if (campaign.dueMode === "hard") validateDue(campaign.dueAt, campaign.timezone);
+  else parseDue(campaign.dueAt, campaign.timezone);
   const file = noticePath(context, campaignId);
   if (fs.existsSync(file)) fail(`Notice 已存在：${campaignId}`);
   const digest = noticeDigest(campaign);
   const content = renderNotice(context, campaign, digest);
+  const audit = verification.audit;
+  const auditSnapshot = {
+    sourceHead: audit.sourceHead || null,
+    currentBaseline: audit.currentBaseline,
+    pendingAssignments: audit.pendingAssignments || {},
+    generatedAt: audit.generatedAt,
+    inputPaths: AUDIT_INPUT_PATHS,
+    inputHash: computeAuditInputHash(),
+  };
   writeJson(file, {
-    schemaVersion: 1,
+    schemaVersion: 2,
     campaignId,
     digest,
     publishedAt: localDate(),
     publishedByRole: "sm",
+    auditSnapshot,
     content,
   });
   commitOnly(context, file, `signoff(publish): ${campaignId}`, sm);

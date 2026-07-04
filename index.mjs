@@ -205,6 +205,9 @@ const DEFAULT_REPO_STRATEGY = {
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 const templateDir = path.join(rootDir, "template");
+const CLI_VERSION = JSON.parse(
+  fs.readFileSync(path.join(rootDir, "package.json"), "utf8"),
+).version;
 
 function parseArgs(argv) {
   const result = {
@@ -717,6 +720,7 @@ function buildReplacements(options, roles) {
     REPO_NAME: repoName,
     ROLE_PRESET: options.preset,
     ROLE_PRESET_LABEL: preset.label,
+    TOOL_VERSION: CLI_VERSION,
     CREATED_DATE: today,
     SPRINT_NUMBER: String(options.sprintNumber),
     DEFAULT_BRANCH: options.defaultBranch,

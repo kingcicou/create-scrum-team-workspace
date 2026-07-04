@@ -9,6 +9,9 @@ import { pathToFileURL } from "node:url";
 
 const packageDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const cliPath = path.join(packageDir, "index.mjs");
+const pkgVersion = JSON.parse(
+  fs.readFileSync(path.join(packageDir, "package.json"), "utf8"),
+).version;
 
 function git(cwd, args) {
   return execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8" }).trim();
@@ -1168,14 +1171,17 @@ ${danglingRow}`,
   }
 });
 
-test("v0.10.4 keeps release entrypoints pinned to the package version", () => {
+test("release entrypoints and injected tool version stay pinned to the package version", () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(packageDir, "package.json"), "utf8"));
+  const escaped = pkg.version.replace(/\./g, "\\.");
   const read = (name) => fs.readFileSync(path.join(packageDir, name), "utf8");
-  assert.equal(pkg.version, "0.10.4");
-  assert.match(read("README.md"), /create-scrum-team-workspace#v0\.10\.4/);
+  assert.match(read("README.md"), new RegExp(`create-scrum-team-workspace#v${escaped}`));
   assert.doesNotMatch(read("README.md"), /create-scrum-team-workspace\/v0\.9\.[1589]\//);
-  assert.match(read("create.sh"), /SCRUM_TEMPLATE_REF:-v0\.10\.4/);
-  assert.match(read("create.ps1"), /else \{ "v0\.10\.4" \}/);
+  assert.match(read("create.sh"), new RegExp(`SCRUM_TEMPLATE_REF:-v${escaped}`));
+  assert.match(read("create.ps1"), new RegExp(`else \\{ "v${escaped}" \\}`));
+  // P-LOW-2：模板用占位符，生成时由 index.mjs 注入 package.json 版本（生成项目无根 package.json）。
+  assert.match(read("template/tools/signoff.mjs"), /const TOOL_VERSION = "\{\{TOOL_VERSION\}\}"/);
+  assert.match(read("index.mjs"), /TOOL_VERSION: CLI_VERSION/);
 });
 
 test("v0.10.4 publishes immutable notices before signoff", () => {
@@ -1367,7 +1373,7 @@ test("v0.10.4 publishes immutable notices before signoff", () => {
     const campaign = JSON.parse(fs.readFileSync(autoCampaign, "utf8"));
     assert.deepEqual(campaign.assignments.po.coverage, ["CHG-200"]);
     assert.equal(campaign.mode, "corrective");
-    assert.equal(campaign.toolVersion, "0.10.4");
+    assert.equal(campaign.toolVersion, pkgVersion);
     assert.equal(campaign.scopeSource, "global-audit");
     assert.equal(campaign.auditSourceState, "clean");
     assert.match(campaign.auditScopeHash, /^[a-f0-9]{64}$/);
@@ -1401,7 +1407,10 @@ test("v0.10.4 publishes immutable notices before signoff", () => {
     ]);
     assert.match(
       published,
-      /生成依据：tool=0\.10\.4.*tree=[a-f0-9]{12}.*--notice=[a-f0-9]{64}/s,
+      new RegExp(
+        `生成依据：tool=${pkgVersion.replace(/\./g, "\\.")}.*tree=[a-f0-9]{12}.*--notice=[a-f0-9]{64}`,
+        "s",
+      ),
     );
     const digest = /NOTICE-BEGIN[^]*?sha256=([a-f0-9]{64})/.exec(published)?.[1];
     assert.throws(
@@ -1428,6 +1437,75 @@ test("v0.10.4 publishes immutable notices before signoff", () => {
       (error) => error.status === 2,
     );
     runSignoff(["close", "--campaign=SIGN-20260704-001", "--actor=sm"]);
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("v0.10.5 advisory late signing, hard-mode enforcement, and audit-input drift", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-0105-"));
+  const target = path.join(sandbox, "project");
+  try {
+    runCli([target, "--repo=event-app", "--no-worktrees"]);
+    const repo = path.join(target, "10_代码仓库", "event-app");
+    const tool = path.join(target, "tools", "signoff.mjs");
+    const runSignoff = (args, options = {}) =>
+      execFileSync(process.execPath, [tool, ...args], {
+        cwd: target,
+        encoding: "utf8",
+        ...options,
+      });
+    git(repo, ["config", "--worktree", "user.name", "Shared Workspace"]);
+    git(repo, ["config", "--worktree", "user.email", "shared@example.test"]);
+
+    // hard 模式强制未来截止：过去时间被拒
+    assert.throws(
+      () => runSignoff([
+        "prepare", "--campaign=SIGN-HARD-001", "--actor=sm",
+        "--target=V1.5", "--roles=po", "--coverage=BASELINE-V1.5",
+        "--due=2020-01-01 00:00", "--due-mode=hard",
+      ], { stdio: "pipe" }),
+      (error) => error.status === 2,
+    );
+
+    // advisory 模式允许历史截止 → 逾期签核成功且 Event 记录 late=true
+    runSignoff([
+      "prepare", "--campaign=SIGN-ADV-001", "--actor=sm",
+      "--target=V1.5", "--mode=corrective", "--roles=all",
+      "--coverage=BASELINE-V1.5", "--due=2020-01-01 00:00",
+    ]);
+    const notice = runSignoff(["publish", "--campaign=SIGN-ADV-001", "--actor=sm"]);
+    const digest = /NOTICE-BEGIN[^]*?sha256=([a-f0-9]{64})/.exec(notice)?.[1];
+    // Notice 术语已改为“一致性摘要”，不再是“通知凭证”
+    assert.match(notice, /Notice 一致性摘要：sha256=/);
+    assert.doesNotMatch(notice, /通知凭证/);
+    for (const id of ["po", "sm", "tl", "midbe", "srfe", "midfe", "fs"]) {
+      runSignoff(["sign", "--campaign=SIGN-ADV-001", `--role=${id}`, `--notice=${digest}`]);
+    }
+    const evDir = path.join(repo, ".team", "signoffs", "events", "SIGN-ADV-001");
+    const evName = fs.readdirSync(evDir).find((name) => name.startsWith("EVT-PO-"));
+    const event = JSON.parse(fs.readFileSync(path.join(evDir, evName), "utf8"));
+    assert.equal(event.late, true);
+    assert.ok(event.lateBySeconds > 0);
+    assert.equal(event.dueMode, "advisory");
+    runSignoff(["close", "--campaign=SIGN-ADV-001", "--actor=sm"]);
+
+    // 审计输入漂移：publish 后修改角色手册（审计输入）→ sign 用 Node 重算指纹并拒绝
+    runSignoff([
+      "prepare", "--campaign=SIGN-ADV-002", "--actor=sm",
+      "--target=V1.5", "--mode=corrective", "--roles=po",
+      "--coverage=BASELINE-V1.5", "--due=2099-07-05 18:00",
+    ]);
+    const noticeTwo = runSignoff(["publish", "--campaign=SIGN-ADV-002", "--actor=sm"]);
+    const digestTwo = /NOTICE-BEGIN[^]*?sha256=([a-f0-9]{64})/.exec(noticeTwo)?.[1];
+    const charter = path.join(target, "00_项目导航", "11_角色行动手册.md");
+    fs.appendFileSync(charter, "\n<!-- 审计输入漂移测试 -->\n", "utf8");
+    assert.throws(
+      () => runSignoff([
+        "sign", "--campaign=SIGN-ADV-002", "--role=po", `--notice=${digestTwo}`,
+      ], { stdio: "pipe" }),
+      (error) => error.status === 2,
+    );
   } finally {
     fs.rmSync(sandbox, { recursive: true, force: true });
   }

@@ -6,6 +6,35 @@
 
 ## [Unreleased]
 
+## [0.10.5] - 2026-07-04
+
+### Changed
+
+- 截止时间默认改为 **advisory**：逾期仍可签核，Event 记录 `late=true` 与迟到时长；
+  保留可选 `--due-mode=hard`（强制未来截止，过期拒签）。
+- `sign` 与 Python 解耦：`publish` 固化审计快照（`auditInputHash`/`inputPaths`/
+  `pendingAssignments`）到 Notice，`sign` 用 Node/Git 重算并作**三级漂移判断**
+  （审计输入漂移拒签、代码漂移仅提示、仅签核工件漂移放行）；`close` 仍运行 Python
+  做实时全局审计作为权威门禁。成员签核只依赖 Node/Git/Notice。
+- Notice「通知凭证」术语改为「Notice 一致性摘要」，明确非秘密、非身份认证、非阅读证明。
+- 工具版本改由生成器注入（模板用 `{{TOOL_VERSION}}` 占位，`index.mjs` 注入
+  package.json 版本），生成项目无根 package.json 时不再运行时读取；保留一致性测试。
+- 当前 SOP（首页第 6 步、角色手册 SM 五步与签核编排协议、Scrum/12）统一为
+  `prepare → publish → sign`；历史 `notify` 内容保留为 legacy 叙述。
+
+### Added
+
+- v0.10.5 反向测试：advisory 逾期签核记录 late、hard 模式过期拒签、审计输入漂移拒签。
+- ADR「签核身份保证与签名提交高保证路线」：记录命令级身份的边界与签名提交升级路线。
+
+### Fixed
+
+- 修正评审中「根除代签」「无安全漏洞」的过强表述：命令级身份只保证「工件与声明身份
+  一致」，非操作者认证；系统适用于受信任团队的流程完整性与审计追踪，高保证环境仍需
+  平台账号、保护分支、签名提交或审批认证（见 DESIGN「安全边界与适用范围」）。
+- Scrum/12、锁边界文档：明确 common-dir 锁仅覆盖同一 Git common-dir 的并发，
+  跨机器由 pull/push、分支保护与冲突处理保证。
+
 ## [0.10.4] - 2026-07-04
 
 ### Added
