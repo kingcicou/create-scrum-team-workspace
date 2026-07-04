@@ -11,19 +11,19 @@
 ### 方式一：Bash 一键执行（macOS / Linux / WSL / Git Bash）
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.9.9/create.sh) my-project
+bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.10.0/create.sh) my-project
 ```
 
 可叠加任意 CLI 选项：
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.9.9/create.sh) my-project --type=new --preset=tech
+bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.10.0/create.sh) my-project --type=new --preset=tech
 ```
 
 ### 方式二：PowerShell 一键执行（Windows）
 
 ```powershell
-irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.9.9/create.ps1 | iex
+irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.10.0/create.ps1 | iex
 ```
 
 执行后会进入交互式创建。也可提前设环境变量传项目名与额外参数：
@@ -31,20 +31,20 @@ irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.9
 ```powershell
 $env:PROJECT_NAME="my-project"
 $env:SCRUM_TEMPLATE_ARGS="--type=new --preset=tech"
-irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.9.9/create.ps1 | iex
+irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.10.0/create.ps1 | iex
 ```
 
 ### 方式三：npx（全平台，需 Node.js >= 18）
 
 ```bash
 # 直接从 GitHub 执行（推荐，与参考仓库一致）
-npx -y github:kingcicou/create-scrum-team-workspace#v0.9.9 my-project
+npx -y github:kingcicou/create-scrum-team-workspace#v0.10.0 my-project
 
 # 仅预览不写盘
-npx -y github:kingcicou/create-scrum-team-workspace#v0.9.9 my-project --dry-run
+npx -y github:kingcicou/create-scrum-team-workspace#v0.10.0 my-project --dry-run
 
 # 交互式
-npx -y github:kingcicou/create-scrum-team-workspace#v0.9.9 --interactive
+npx -y github:kingcicou/create-scrum-team-workspace#v0.10.0 --interactive
 ```
 
 > 未发布到 npm registry，请使用 `github:` 前缀。
@@ -76,12 +76,12 @@ node index.mjs my-project --type=new --preset=tech
 - SM/教练可直接生成适合群聊转发的快报、Sprint 流程全景和单角色状态卡。
 - SM 查询入口提供“问题→模板”选择和真实示例；`review-status.mjs` 跨平台检查
   Review/Retro 追加名单与重复标题。
-- SM 对角色手册签核负责编排和闭环，内置首签、重签、误派纠偏和完成通知；
-  成员运行 `signoff.mjs sign` 创建不可变事件文件，审计器直接输出待处理人。
+- SM 对角色手册签核负责编排和闭环；`prepare --from-audit` 自动生成逐角色纠偏
+  范围和完整通知，项目全局仍有缺口时 `close` 会拒绝关闭。
 - Sprint 经验回流采用“来源、L2 知识、L3 操作、验证、发布、项目闭环”六层
   DoD，避免只修项目或模板功能却遗漏知识传承。
-- 角色签核采用 Change/Campaign/Event 文件模型，姓名、邮箱、覆盖和日期自动
-  生成；事件首次提交后不可修改，只有 SM 能在审计归零后关闭。
+- 角色签核采用 Change/Campaign/Event 文件模型；命令级身份无需改仓库 Git
+  配置，同一工作目录的签核写入由互斥锁串行化，事件创建后不可修改。
 - **显式文档治理**：普通任务只更新 Sprint 任务表；长期正式产物标记
   `governance: managed`，历史/入口/骨架不追溯清债；高冲突时才升级 PR/CODEOWNERS。
 - **小团队说明**：2-4 人帽子合并目前是实验性手工方案，建议生成时使用

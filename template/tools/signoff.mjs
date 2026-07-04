@@ -15,8 +15,9 @@ const ROLE_ALIASES = {
 };
 
 function fail(message, code = 2) {
-  console.error(`[ERROR] ${message}`);
-  process.exit(code);
+  const error = new Error(message);
+  error.exitCode = code;
+  throw error;
 }
 
 function parseArgs(argv) {
@@ -39,8 +40,11 @@ function writeJson(file, value) {
   fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
-function git(repo, args, allowFailure = false) {
-  const result = spawnSync("git", ["-C", repo, ...args], { encoding: "utf8" });
+function git(repo, args, allowFailure = false, identity = null) {
+  const config = identity
+    ? ["-c", `user.name=${identity.name}`, "-c", `user.email=${identity.email}`]
+    : [];
+  const result = spawnSync("git", ["-C", repo, ...config, ...args], { encoding: "utf8" });
   if (result.status !== 0 && !allowFailure) {
     fail(`git ${args.join(" ")} 失败：${(result.stderr || result.stdout).trim()}`);
   }
@@ -55,6 +59,14 @@ function localDate() {
 
 function compactDate(value) {
   return value.replaceAll("-", "");
+}
+
+function splitValues(value) {
+  return String(value || "").split(/[,，;]/).map((item) => item.trim()).filter(Boolean);
+}
+
+function sleep(milliseconds) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
 }
 
 function normalizeRole(value) {
@@ -85,27 +97,22 @@ function loadContext(options) {
     fail(`签核证据目录必须位于 Git 仓库：${repo}`);
   }
   const store = path.join(repo, ".team", "signoffs");
-  return { config, roles, repo, store };
+  const lockTimeoutMs = Number(options["lock-timeout"] || 60_000);
+  return { config, roles, repo, store, lockTimeoutMs };
 }
 
-function currentIdentity(repo) {
-  return {
-    name: git(repo, ["config", "--get", "user.name"], true).stdout.trim(),
-    email: git(repo, ["config", "--get", "user.email"], true).stdout.trim(),
-  };
-}
-
-function requireIdentity(context, roleId) {
+function roleIdentity(context, roleId) {
   const expected = context.roles[roleId];
   if (!expected) fail(`未知角色：${roleId}`);
-  const actual = currentIdentity(context.repo);
-  if (actual.name !== expected.name || actual.email.toLowerCase() !== expected.email.toLowerCase()) {
-    fail(
-      `Git 身份不匹配。角色 ${roleId} 应为 ${expected.name} <${expected.email}>，`
-      + `当前为 ${actual.name || "未配置"} <${actual.email || "未配置"}>。`,
-    );
-  }
+  if (!expected.name || !expected.email) fail(`角色 ${roleId} 缺少姓名或邮箱。`);
   return expected;
+}
+
+function requireActor(options, expectedRole) {
+  const actor = normalizeRole(options.actor);
+  if (actor !== expectedRole) {
+    fail(`本命令只能由角色 ${expectedRole} 执行，请显式传入 --actor=${expectedRole}。`);
+  }
 }
 
 function relativeToRepo(context, file) {
@@ -117,11 +124,39 @@ function ensureNoStagedChanges(context) {
   if (staged) fail(`存在已暂存内容，拒绝混入签核提交：\n${staged}`);
 }
 
-function commitOnly(context, file, message) {
+function commitOnly(context, file, message, identity) {
   ensureNoStagedChanges(context);
   const relative = relativeToRepo(context, file);
   git(context.repo, ["add", "--", relative]);
-  git(context.repo, ["commit", "-m", message, "--", relative]);
+  git(context.repo, ["commit", "-m", message, "--", relative], false, identity);
+}
+
+function withMutationLock(context, action) {
+  const commonDirRaw = git(context.repo, ["rev-parse", "--git-common-dir"]).stdout.trim();
+  const commonDir = path.isAbsolute(commonDirRaw)
+    ? commonDirRaw
+    : path.resolve(context.repo, commonDirRaw);
+  const lock = path.join(commonDir, "signoff-operation.lock");
+  let handle;
+  const deadline = Date.now() + context.lockTimeoutMs;
+  while (!handle) {
+    try {
+      handle = fs.openSync(lock, "wx");
+      fs.writeFileSync(handle, `${process.pid} ${new Date().toISOString()}\n`, "utf8");
+    } catch (error) {
+      if (error.code !== "EEXIST") throw error;
+      if (Date.now() >= deadline) {
+        fail(`等待签核写锁超时：${lock}。确认没有活动签核进程后再处理遗留锁。`);
+      }
+      sleep(100);
+    }
+  }
+  try {
+    return action();
+  } finally {
+    fs.closeSync(handle);
+    fs.rmSync(lock, { force: true });
+  }
 }
 
 function introduction(context, file, expected) {
@@ -183,6 +218,55 @@ function eventFiles(context, campaignId) {
     .map((name) => path.join(dir, name));
 }
 
+function nextCampaignId(context) {
+  const date = compactDate(localDate());
+  const dir = path.join(context.store, "campaigns");
+  const prefix = `SIGN-${date}-`;
+  const sequences = fs.existsSync(dir)
+    ? fs.readdirSync(dir)
+      .map((name) => new RegExp(`^${prefix}(\\d{3})\\.json$`).exec(name)?.[1])
+      .filter(Boolean)
+      .map(Number)
+    : [];
+  const next = (sequences.length ? Math.max(...sequences) : 0) + 1;
+  return `${prefix}${String(next).padStart(3, "0")}`;
+}
+
+function auditPath() {
+  return path.join(PROJECT_ROOT, "00_项目导航", "文档索引", "07_签核状态.json");
+}
+
+function refreshGlobalAudit(context) {
+  const script = path.join(PROJECT_ROOT, "tools", "generate_doc_index.py");
+  if (!fs.existsSync(script)) return { available: false, reason: "缺少 generate_doc_index.py" };
+  const candidates = process.env.PYTHON
+    ? [[process.env.PYTHON, []]]
+    : process.platform === "win32"
+      ? [["python", []], ["py", ["-3"]]]
+      : [["python3", []], ["python", []]];
+  let result = null;
+  for (const [command, prefix] of candidates) {
+    result = spawnSync(command, [...prefix, script], {
+      cwd: PROJECT_ROOT,
+      encoding: "utf8",
+    });
+    if (!result.error && result.status === 0) break;
+  }
+  if (!result || result.error || result.status !== 0) {
+    const detail = result?.error?.message || result?.stderr || "找不到 Python";
+    return { available: false, reason: `无法刷新全局审计：${String(detail).trim()}` };
+  }
+  const file = auditPath();
+  if (!fs.existsSync(file)) return { available: false, reason: "生成器未输出 07_签核状态.json" };
+  return { available: true, data: readJson(file) };
+}
+
+function globalAuditOrFail(context) {
+  const audit = refreshGlobalAudit(context);
+  if (!audit.available) fail(`${audit.reason}。为避免错误关闭，本次操作已停止。`);
+  return audit.data;
+}
+
 function evaluate(context, campaignId, print = true) {
   const { file: campaignFile, data: campaign } = loadCampaign(context, campaignId);
   const campaignEvidence = introduction(context, campaignFile, context.roles.sm);
@@ -242,118 +326,189 @@ function evaluate(context, campaignId, print = true) {
 }
 
 function prepare(context, options) {
-  requireIdentity(context, "sm");
-  const campaignId = String(options.campaign || "").trim();
-  const target = String(options.target || "").trim();
-  const coverage = String(options.coverage || "").split(/[,，]/).map((item) => item.trim()).filter(Boolean);
-  if (!campaignId || !target || !coverage.length) {
-    fail("prepare 需要 --campaign、--target、--coverage。");
-  }
-  const roleIds = options.roles === "all"
-    ? Object.keys(context.roles)
-    : String(options.roles || "").split(/[,，]/).map(normalizeRole).filter(Boolean);
-  if (!roleIds.length) fail("prepare 需要 --roles=all 或角色列表。");
-  for (const roleId of roleIds) if (!context.roles[roleId]) fail(`未知角色：${roleId}`);
-  const file = campaignPath(context, campaignId);
-  if (fs.existsSync(file)) fail(`Campaign 已存在：${campaignId}`);
-  const assignments = Object.fromEntries(roleIds.map((roleId) => [roleId, { coverage }]));
-  writeJson(file, {
-    schemaVersion: 1,
-    campaignId,
-    mode: options.mode || "incremental",
-    targetBaseline: target,
-    sourceCampaignId: options.source || null,
-    createdAt: localDate(),
-    createdByRole: "sm",
-    assignments,
+  requireActor(options, "sm");
+  const sm = roleIdentity(context, "sm");
+  withMutationLock(context, () => {
+    let assignments;
+    let target = String(options.target || "").trim();
+    let mode = options.mode || "incremental";
+    let source = options.source || null;
+    if (options["from-audit"]) {
+      const audit = globalAuditOrFail(context);
+      if (!audit.pendingCount || !Object.keys(audit.pendingAssignments || {}).length) {
+        fail("全局审计没有待处理角色，无需创建纠偏 Campaign。");
+      }
+      assignments = Object.fromEntries(
+        Object.entries(audit.pendingAssignments).map(([roleId, coverage]) => [
+          normalizeRole(roleId),
+          { coverage },
+        ]),
+      );
+      target ||= audit.currentBaseline;
+      mode = "corrective";
+      source ||= audit.closedCampaignId || null;
+    } else {
+      const coverage = splitValues(options.coverage);
+      if (!target || !coverage.length) fail("prepare 需要 --target、--coverage，或使用 --from-audit。");
+      const roleIds = options.roles === "all"
+        ? Object.keys(context.roles)
+        : splitValues(options.roles).map(normalizeRole);
+      if (!roleIds.length) fail("prepare 需要 --roles=all 或角色列表。");
+      assignments = Object.fromEntries(roleIds.map((roleId) => [roleId, { coverage }]));
+    }
+    for (const roleId of Object.keys(assignments)) {
+      if (!context.roles[roleId]) fail(`未知角色：${roleId}`);
+    }
+    const campaignId = String(options.campaign || nextCampaignId(context)).trim();
+    const file = campaignPath(context, campaignId);
+    if (fs.existsSync(file)) fail(`Campaign 已存在：${campaignId}`);
+    writeJson(file, {
+      schemaVersion: 2,
+      campaignId,
+      mode,
+      targetBaseline: target,
+      sourceCampaignId: source,
+      purpose: options.purpose || (options["from-audit"] ? "纠正全局签核缺口" : "确认受影响规范变更"),
+      summary: options.summary || "按 Campaign 的逐角色范围完成阅读与签核。",
+      readScope: splitValues(options.read || "本人角色卡;责任表;周期任务清单;角色行动手册指定变更章节"),
+      dueAt: options.due || "由 SM 确认",
+      timezone: options.timezone || "Asia/Shanghai",
+      identityMode: "command-scoped",
+      createdAt: localDate(),
+      createdByRole: "sm",
+      assignments,
+    });
+    commitOnly(context, file, `signoff(prepare): ${campaignId} ${target}`, sm);
+    console.log(`[OK] Campaign 已创建并由 SM 提交：${relativeToRepo(context, file)}`);
+    console.log(`[INFO] Campaign ID：${campaignId}`);
   });
-  commitOnly(context, file, `signoff(prepare): ${campaignId} ${target}`);
-  console.log(`[OK] Campaign 已创建并由 SM 提交：${relativeToRepo(context, file)}`);
 }
 
 function sign(context, options) {
-  const campaignId = String(options.campaign || latestCampaignId(context));
   const roleId = normalizeRole(options.role);
   if (!roleId) fail("sign 需要 --role=<角色槽位>。");
-  const member = requireIdentity(context, roleId);
-  const { data: campaign } = loadCampaign(context, campaignId);
-  const assignment = campaign.assignments?.[roleId];
-  if (!assignment) fail(`Campaign ${campaignId} 未分配角色 ${roleId}。`);
-  const campaignEvidence = introduction(context, campaignPath(context, campaignId), context.roles.sm);
-  if (!campaignEvidence.ok) fail(`Campaign 尚未由 SM 有效提交：${campaignEvidence.detail}`);
-  if (fs.existsSync(closurePath(context, campaignId))) fail(`Campaign 已存在 closure，拒绝继续签核：${campaignId}`);
+  const member = roleIdentity(context, roleId);
+  withMutationLock(context, () => {
+    const campaignId = String(options.campaign || latestCampaignId(context));
+    const { data: campaign } = loadCampaign(context, campaignId);
+    const assignment = campaign.assignments?.[roleId];
+    if (!assignment) fail(`Campaign ${campaignId} 未分配角色 ${roleId}。`);
+    const campaignEvidence = introduction(context, campaignPath(context, campaignId), context.roles.sm);
+    if (!campaignEvidence.ok) fail(`Campaign 尚未由 SM 有效提交：${campaignEvidence.detail}`);
+    if (fs.existsSync(closurePath(context, campaignId))) fail(`Campaign 已存在 closure，拒绝继续签核：${campaignId}`);
 
-  const existing = eventFiles(context, campaignId);
-  const prefix = `EVT-${roleId.toUpperCase()}-${compactDate(localDate())}-`;
-  let sequence = 1;
-  while (existing.some((file) => path.basename(file).startsWith(`${prefix}${String(sequence).padStart(3, "0")}`))) {
-    sequence += 1;
-  }
-  const eventId = options.event || `${prefix}${String(sequence).padStart(3, "0")}`;
-  const file = path.join(eventDir(context, campaignId), `${eventId}.json`);
-  if (fs.existsSync(file)) fail(`Event 已存在：${eventId}`);
-  writeJson(file, {
-    schemaVersion: 1,
-    eventId,
-    campaignId,
-    role: roleId,
-    member: member.name,
-    email: member.email,
-    targetBaseline: campaign.targetBaseline,
-    coverage: assignment.coverage,
-    signedAt: localDate(),
-    result: "accepted",
+    const existing = eventFiles(context, campaignId);
+    const prefix = `EVT-${roleId.toUpperCase()}-${compactDate(localDate())}-`;
+    let sequence = 1;
+    while (existing.some((file) => path.basename(file).startsWith(`${prefix}${String(sequence).padStart(3, "0")}`))) {
+      sequence += 1;
+    }
+    const eventId = options.event || `${prefix}${String(sequence).padStart(3, "0")}`;
+    const file = path.join(eventDir(context, campaignId), `${eventId}.json`);
+    if (fs.existsSync(file)) fail(`Event 已存在：${eventId}`);
+    writeJson(file, {
+      schemaVersion: 2,
+      eventId,
+      campaignId,
+      role: roleId,
+      member: member.name,
+      email: member.email,
+      targetBaseline: campaign.targetBaseline,
+      coverage: assignment.coverage,
+      signedAt: localDate(),
+      identityMode: "command-scoped",
+      result: "accepted",
+    });
+    commitOnly(context, file, `sign(${roleId}): ${eventId} · ${campaignId}`, member);
+    const evidence = introduction(context, file, member);
+    if (!evidence.ok) fail(`Event 提交后校验失败：${evidence.detail}`);
+    console.log(`[OK] ${eventId} · ${member.name} · ${assignment.coverage.join(",")} · ${evidence.detail}`);
+    console.log("[INFO] 未修改仓库 user.name/user.email；身份仅作用于本次提交。");
   });
-  commitOnly(context, file, `sign(${roleId}): ${eventId} · ${campaignId}`);
-  const evidence = introduction(context, file, member);
-  if (!evidence.ok) fail(`Event 提交后校验失败：${evidence.detail}`);
-  console.log(`[OK] ${eventId} · ${member.name} · ${assignment.coverage.join(",")} · ${evidence.detail}`);
 }
 
 function close(context, options) {
-  requireIdentity(context, "sm");
-  const campaignId = String(options.campaign || latestCampaignId(context));
-  const status = evaluate(context, campaignId, true);
-  if (!status.ready) fail("审计未归零，拒绝关闭 Campaign。");
-  const file = closurePath(context, campaignId);
-  if (fs.existsSync(file)) fail(`Closure 已存在：${campaignId}`);
-  writeJson(file, {
-    schemaVersion: 1,
-    campaignId,
-    closedAt: localDate(),
-    closedByRole: "sm",
-    result: "closed",
-    eventIds: status.events.filter((event) => event.evidence.ok).map((event) => event.data.eventId).sort(),
+  requireActor(options, "sm");
+  const sm = roleIdentity(context, "sm");
+  withMutationLock(context, () => {
+    const campaignId = String(options.campaign || latestCampaignId(context));
+    const status = evaluate(context, campaignId, true);
+    if (!status.ready) fail("Campaign 局部审计未归零，拒绝关闭。");
+    const globalAudit = globalAuditOrFail(context);
+    if (globalAudit.pendingCount > 0) {
+      const detail = Object.entries(globalAudit.pendingAssignments || {})
+        .map(([roleId, coverage]) => `${roleId}:${coverage.join(",")}`)
+        .join("；");
+      fail(`项目全局仍有 ${globalAudit.pendingCount} 名待处理，拒绝关闭：${detail}`);
+    }
+    const file = closurePath(context, campaignId);
+    if (fs.existsSync(file)) fail(`Closure 已存在：${campaignId}`);
+    writeJson(file, {
+      schemaVersion: 2,
+      campaignId,
+      closedAt: localDate(),
+      closedByRole: "sm",
+      globalAuditGeneratedAt: globalAudit.generatedAt,
+      result: "closed",
+      eventIds: status.events.filter((event) => event.evidence.ok).map((event) => event.data.eventId).sort(),
+    });
+    commitOnly(context, file, `signoff(close): ${campaignId}`, sm);
+    const evidence = introduction(context, file, sm);
+    if (!evidence.ok) fail(`Closure 提交后校验失败：${evidence.detail}`);
+    console.log(`[OK] Campaign 已由 SM 关闭：${campaignId} · ${evidence.detail}`);
   });
-  commitOnly(context, file, `signoff(close): ${campaignId}`);
-  const evidence = introduction(context, file, context.roles.sm);
-  if (!evidence.ok) fail(`Closure 提交后校验失败：${evidence.detail}`);
-  console.log(`[OK] Campaign 已由 SM 关闭：${campaignId} · ${evidence.detail}`);
 }
 
 function notify(context, options) {
   const campaignId = String(options.campaign || latestCampaignId(context));
   const { data: campaign } = loadCampaign(context, campaignId);
-  console.log(`【签核通知｜${campaignId}｜${campaign.targetBaseline} ${campaign.mode}】`);
-  console.log(`新规则：每人使用 signoff.mjs 创建并提交独立 Event 文件；禁止编辑他人 Event。`);
+  console.log(`【签核通知｜${campaignId}｜${campaign.targetBaseline}｜${campaign.mode}】`);
+  if (campaign.sourceCampaignId) console.log(`来源：${campaign.sourceCampaignId}`);
+  console.log(`目的：${campaign.purpose || "确认受影响规范变更"}`);
+  console.log(`变更摘要：${campaign.summary || "见指定阅读范围"}`);
+  console.log(`阅读范围：${(campaign.readScope || []).join("；") || "由 SM 指定"}`);
+  console.log(`截止：${campaign.dueAt || "由 SM 确认"}（${campaign.timezone || "Asia/Shanghai"}）`);
+  console.log("身份：无需、也禁止为签核反复修改 git user.name/user.email；命令仅对本次提交使用角色事实源。");
+  console.log("执行：在共享工作目录中直接运行本人命令；工具会用互斥锁串行提交，锁占用时等待后重试。");
   for (const [roleId, assignment] of Object.entries(campaign.assignments || {})) {
     const role = context.roles[roleId];
     console.log(`@${role.name} (${roleId})：覆盖 ${assignment.coverage.join(",")}`);
     console.log(`  node tools/signoff.mjs sign --campaign=${campaignId} --role=${roleId}`);
   }
-  console.log("关闭：仅 SM 在全员 status=VALID 后执行 close。");
+  console.log("完成回复：【签核完成】角色/成员 + 命令输出中的 Event ID；无需手填 commit。");
+  console.log(`验收：SM 运行 node tools/signoff.mjs status --campaign=${campaignId}`);
+  console.log(`关闭：仅 SM 运行 node tools/signoff.mjs close --campaign=${campaignId} --actor=sm；项目全局仍有缺口时工具拒绝关闭。`);
 }
 
-const { command, options } = parseArgs(process.argv.slice(2));
-const context = loadContext(options);
-if (command === "prepare") prepare(context, options);
-else if (command === "sign") sign(context, options);
-else if (command === "close") close(context, options);
-else if (command === "notify") notify(context, options);
-else if (command === "status") {
-  const campaignId = String(options.campaign || latestCampaignId(context));
-  const status = evaluate(context, campaignId, true);
-  process.exit(status.closed || status.ready ? 0 : 2);
-} else {
-  fail(`未知命令：${command}`);
+try {
+  const { command, options } = parseArgs(process.argv.slice(2));
+  const context = loadContext(options);
+  if (command === "prepare") prepare(context, options);
+  else if (command === "sign") sign(context, options);
+  else if (command === "close") close(context, options);
+  else if (command === "notify") notify(context, options);
+  else if (command === "status") {
+    const campaignId = String(options.campaign || latestCampaignId(context));
+    const status = evaluate(context, campaignId, true);
+    const globalAudit = refreshGlobalAudit(context);
+    if (globalAudit.available) {
+      console.log(
+        `Global: ${globalAudit.data.pendingCount === 0 ? "READY" : "PENDING"}`
+        + ` · pending=${globalAudit.data.pendingCount}`
+        + ` · generated=${globalAudit.data.generatedAt}`,
+      );
+    } else {
+      console.log(`Global: UNAVAILABLE · ${globalAudit.reason}`);
+    }
+    process.exitCode = (status.closed || status.ready)
+      && globalAudit.available
+      && globalAudit.data.pendingCount === 0
+      ? 0
+      : 2;
+  } else {
+    fail(`未知命令：${command}`);
+  }
+} catch (error) {
+  console.error(`[ERROR] ${error.message}`);
+  process.exitCode = error.exitCode || 1;
 }

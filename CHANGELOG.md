@@ -6,6 +6,28 @@
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-07-04
+
+### Added
+
+- `generate_doc_index.py` 输出机器可读的 `07_签核状态.json`，包含全局待处理人数
+  和逐角色 Change ID。
+- `signoff.mjs prepare --from-audit --actor=sm` 自动生成 corrective Campaign、
+  角色范围和连续 Campaign ID。
+- Campaign V2 保存目的、摘要、阅读范围、截止时间和时区，`notify` 可直接转发。
+
+### Changed
+
+- 签核提交改用命令级 Git 身份，不再要求成员反复修改共享仓库
+  `user.name/user.email`。
+- 同一工作目录中的 prepare/sign/close 使用 Git common-dir 互斥锁串行写入。
+- `close` 同时检查 Campaign 局部覆盖和项目全局审计；全局仍有缺口时拒绝关闭。
+
+### Fixed
+
+- 修复 SIGN-20260704-001 局部 `CHG-160` 已关闭、全局仍有三人待处理的状态分裂。
+- 修复多人共用单 worktree 时 Git 配置互相覆盖和签核提交竞争的问题。
+
 ## [0.9.9] - 2026-07-04
 
 ### Added

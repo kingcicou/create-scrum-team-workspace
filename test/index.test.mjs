@@ -1150,34 +1150,30 @@ test("v0.9.6 detects cosigning and excludes anomalous coverage from verified", (
   }
 });
 
-test("v0.9.9 keeps release entrypoints pinned to the package version", () => {
+test("v0.10.0 keeps release entrypoints pinned to the package version", () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(packageDir, "package.json"), "utf8"));
   const read = (name) => fs.readFileSync(path.join(packageDir, name), "utf8");
-  assert.equal(pkg.version, "0.9.9");
-  assert.match(read("README.md"), /create-scrum-team-workspace#v0\.9\.9/);
-  assert.doesNotMatch(read("README.md"), /create-scrum-team-workspace\/v0\.9\.[158]\//);
-  assert.match(read("create.sh"), /SCRUM_TEMPLATE_REF:-v0\.9\.9/);
-  assert.match(read("create.ps1"), /else \{ "v0\.9\.9" \}/);
+  assert.equal(pkg.version, "0.10.0");
+  assert.match(read("README.md"), /create-scrum-team-workspace#v0\.10\.0/);
+  assert.doesNotMatch(read("README.md"), /create-scrum-team-workspace\/v0\.9\.[1589]\//);
+  assert.match(read("create.sh"), /SCRUM_TEMPLATE_REF:-v0\.10\.0/);
+  assert.match(read("create.ps1"), /else \{ "v0\.10\.0" \}/);
 });
 
-test("v0.9.9 signs immutable event files and enforces SM closure", () => {
-  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-099-"));
+test("v0.10.0 isolates commit identity, serializes writes, and enforces global closure", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-0100-"));
   const target = path.join(sandbox, "project");
   try {
     runCli([
       target,
       "--repo=event-app",
-      "--git-root=workspace",
       "--no-worktrees",
     ]);
+    const repo = path.join(target, "10_代码仓库", "event-app");
     const config = JSON.parse(
       fs.readFileSync(path.join(target, "00_项目导航", "roles.config.json"), "utf8"),
     );
     const tool = path.join(target, "tools", "signoff.mjs");
-    const setRole = (id) => {
-      git(target, ["config", "--worktree", "user.name", config.roles[id]]);
-      git(target, ["config", "--worktree", "user.email", config.emails[id]]);
-    };
     const runSignoff = (args, options = {}) =>
       execFileSync(process.execPath, [tool, ...args], {
         cwd: target,
@@ -1185,35 +1181,40 @@ test("v0.9.9 signs immutable event files and enforces SM closure", () => {
         ...options,
       });
 
-    setRole("sm");
+    git(repo, ["config", "--worktree", "user.name", "Shared Workspace"]);
+    git(repo, ["config", "--worktree", "user.email", "shared@example.test"]);
     runSignoff([
       "prepare",
       "--campaign=SIGN-TEST-001",
+      "--actor=sm",
       "--target=V1.5",
       "--mode=corrective",
       "--roles=all",
       "--coverage=BASELINE-V1.5",
+      "--purpose=验证全局基线",
+      "--summary=签核机制测试",
+      "--read=角色卡;责任表;签核规则",
+      "--due=2026-07-04 18:00",
     ]);
-    assert.throws(
-      () => runSignoff(["sign", "--campaign=SIGN-TEST-001", "--role=po"], { stdio: "pipe" }),
-      (error) => error.status === 2,
-    );
 
     for (const id of ["po", "sm", "tl", "midbe", "srfe", "midfe", "fs"]) {
-      setRole(id);
       runSignoff(["sign", "--campaign=SIGN-TEST-001", `--role=${id}`]);
     }
-    setRole("po");
+    assert.equal(git(repo, ["config", "--worktree", "--get", "user.name"]).trim(), "Shared Workspace");
+    assert.equal(
+      git(repo, ["log", "-1", "--format=%an <%ae>", "--", ".team/signoffs/events/SIGN-TEST-001/EVT-PO-20260704-001.json"]).trim(),
+      `${config.roles.po} <${config.emails.po}>`,
+    );
+
     assert.throws(
-      () => runSignoff(["close", "--campaign=SIGN-TEST-001"], { stdio: "pipe" }),
+      () => runSignoff(["close", "--campaign=SIGN-TEST-001", "--actor=po"], { stdio: "pipe" }),
       (error) => error.status === 2,
     );
-    setRole("sm");
     assert.match(
       runSignoff(["status", "--campaign=SIGN-TEST-001"]),
       /Closure: OPEN/,
     );
-    runSignoff(["close", "--campaign=SIGN-TEST-001"]);
+    runSignoff(["close", "--campaign=SIGN-TEST-001", "--actor=sm"]);
     assert.match(
       runSignoff(["status", "--campaign=SIGN-TEST-001"]),
       /Closure: CLOSED/,
@@ -1222,13 +1223,14 @@ test("v0.9.9 signs immutable event files and enforces SM closure", () => {
     runSignoff([
       "prepare",
       "--campaign=SIGN-TEST-002",
+      "--actor=sm",
       "--target=V1.5",
       "--mode=corrective",
       "--roles=po",
       "--coverage=BASELINE-V1.5",
       "--source=SIGN-TEST-001",
     ]);
-    const badDir = path.join(target, ".team", "signoffs", "events", "SIGN-TEST-002");
+    const badDir = path.join(repo, ".team", "signoffs", "events", "SIGN-TEST-002");
     const badFile = path.join(badDir, "EVT-PO-BAD.json");
     fs.mkdirSync(badDir, { recursive: true });
     fs.writeFileSync(
@@ -1247,12 +1249,11 @@ test("v0.9.9 signs immutable event files and enforces SM closure", () => {
       }, null, 2)}\n`,
       "utf8",
     );
-    git(target, ["add", path.relative(target, badFile)]);
-    git(target, ["commit", "-m", "test: SM prelays PO event"]);
-    setRole("po");
+    git(repo, ["add", path.relative(repo, badFile)]);
+    git(repo, ["commit", "-m", "test: SM prelays PO event"]);
     fs.appendFileSync(badFile, "\n", "utf8");
-    git(target, ["add", path.relative(target, badFile)]);
-    git(target, ["commit", "-m", "test: PO whitespace cannot claim event"]);
+    git(repo, ["add", path.relative(repo, badFile)]);
+    git(repo, ["commit", "-m", "test: PO whitespace cannot claim event"]);
     assert.throws(
       () => runSignoff(["status", "--campaign=SIGN-TEST-002"], { stdio: "pipe" }),
       (error) => error.status === 2,
@@ -1262,6 +1263,45 @@ test("v0.9.9 signs immutable event files and enforces SM closure", () => {
       runSignoff(["status", "--campaign=SIGN-TEST-002"]),
       /po .*: VALID/,
     );
+
+    const lock = path.join(repo, ".git", "signoff-operation.lock");
+    fs.writeFileSync(lock, "another operation\n", "utf8");
+    assert.throws(
+      () => runSignoff([
+        "sign",
+        "--campaign=SIGN-TEST-002",
+        "--role=po",
+        "--lock-timeout=100",
+      ], { stdio: "pipe" }),
+      (error) => error.status === 2,
+    );
+    fs.rmSync(lock, { force: true });
+
+    const manualPath = path.join(target, "00_项目导航", "11_角色行动手册.md");
+    const manual = fs.readFileSync(manualPath, "utf8")
+      .replace("version: 1.5", "version: 1.6")
+      .replace(
+      "| CHG-100 | V1.5 |",
+      "| CHG-200 | V1.6 | 2026-07-04 | PO 新增规则 | PO |\n| CHG-100 | V1.5 |",
+    );
+    fs.writeFileSync(manualPath, manual, "utf8");
+
+    assert.throws(
+      () => runSignoff(["close", "--campaign=SIGN-TEST-002", "--actor=sm"], { stdio: "pipe" }),
+      (error) => error.status === 2,
+    );
+    runSignoff(["prepare", "--from-audit", "--actor=sm", "--due=2026-07-05 18:00"]);
+    const autoCampaign = path.join(repo, ".team", "signoffs", "campaigns", "SIGN-20260704-001.json");
+    assert.equal(fs.existsSync(autoCampaign), true);
+    const campaign = JSON.parse(fs.readFileSync(autoCampaign, "utf8"));
+    assert.deepEqual(campaign.assignments.po.coverage, ["CHG-200"]);
+    assert.equal(campaign.mode, "corrective");
+    assert.match(
+      runSignoff(["notify", "--campaign=SIGN-20260704-001"]),
+      /无需、也禁止为签核反复修改 git user\.name\/user\.email/,
+    );
+    runSignoff(["sign", "--campaign=SIGN-20260704-001", "--role=po"]);
+    runSignoff(["close", "--campaign=SIGN-20260704-001", "--actor=sm"]);
   } finally {
     fs.rmSync(sandbox, { recursive: true, force: true });
   }

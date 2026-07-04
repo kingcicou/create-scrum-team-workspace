@@ -113,6 +113,9 @@ node index.mjs <project-name> \
 
 | 版本 | 决策 | 起因 | 选项与取舍 | 结论 |
 | --- | --- | --- | --- | --- |
+| 0.10.0 | 签核提交使用命令级身份与仓库互斥锁 | 团队共用单 worktree，连续修改 user.name/email 并在 54 秒内并发提交 | A. 继续人工改配置；B. 七套持久 worktree；C. `git -c` 身份+短事务锁 | 选C；不污染仓库配置、串行化签核写入；强身份认证仍交给平台/签名提交 |
+| 0.10.0 | Closure 从批次局部判断升级为项目全局门禁 | SIGN-20260704-001 的 7/7 CHG-160 有效，但全局仍有三人旧缺口 | A. 只看本批次；B. SM 人工比对；C. 机器审计 JSON+close 强制校验 | 选C；`prepare --from-audit` 生成逐角色 corrective，待处理非零不得关闭 |
+| 0.10.0 | 通知字段进入 Campaign V2 | v0.9.9 notify 缺目的、阅读范围、截止、回复和完整验收，SM 手工补写产生歧义 | A. 继续依赖模板；B. Campaign 保存结构化通知字段 | 选B；notify 成为可直接转发的事实输出 |
 | 0.9.9 | 签核从共享 Markdown 行迁移到不可变 Event 文件 | SIGN-002 中他人预铺 Event，本人仅改空格即可改变 blame；共享表还发生覆盖和重加行 | A. 加强通知；B. 双重 blame；C. Campaign/Event/Closure 独立文件+CLI | 选C；首次作者+邮箱校验，Event 不可修改，逐角色 assignment 自动生成 |
 | 0.9.9 | 规范升级与历史纠偏合并为新基线签核 | 修复签核机制后，只补旧 CHG 会让成员不知道新命令和门禁 | A. 只签旧缺口；B. 再发两轮；C. 新 Change ID+BASELINE 覆盖 | 选C；一次签收旧缺口和新规则，历史不倒改 |
 | 0.9.8 | 关闭批次不可倒改，异常走 corrective；新 auto 待提交不覆盖 | 项目侧 V1.5 closed 后仍检出四人异常，且 🟡 混合历史迁移与新事件待提交 | A. 重开/改写旧批次；B. 忽略异常；C. 保留历史+纠偏批次并按证据类型分流 | 选C；关闭前待处理必须归零，关闭后新建 corrective，LEGACY 兼容而新 auto 必须提交 |

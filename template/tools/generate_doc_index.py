@@ -518,6 +518,29 @@ def stale_audit(docs):
         for event in sa["events"]:
             parts.append("| " + " | ".join(event) + " |")
 
+        audit_json = {
+            "schemaVersion": 1,
+            "generatedAt": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+            "currentBaseline": f"V{str(cur).replace('V', '')}",
+            "campaignId": sa["campaign"],
+            "closedCampaignId": sa.get("latest_closed_campaign") or None,
+            "pendingCount": badc,
+            "pendingAssignments": sa.get("pending_assignments", {}),
+            "roles": [
+                {
+                    "role": role,
+                    "member": member,
+                    "latestBaseline": ver,
+                    "state": state,
+                }
+                for role, member, ver, state in srows
+            ],
+        }
+        (OUT_DIR / "07_签核状态.json").write_text(
+            json.dumps(audit_json, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
     write("06_停滞审计.md", "文档索引 · 停滞与审计", "\n".join(parts) + "\n")
 
 
@@ -771,10 +794,20 @@ def signoff_audit():
             )[1]
             if active else None
         )
-        closed = [
+        all_closed = [
             item for item in campaigns
             if item.get("状态", "").lower() in ("closed", "关闭", "已关闭")
-            and _version_key(item.get("目标基线", "")) >= _version_key(cur)
+        ]
+        latest_closed_campaign = (
+            max(
+                enumerate(all_closed),
+                key=lambda pair: (_version_key(pair[1].get("目标基线", "")), pair[0]),
+            )[1].get("Campaign ID", "")
+            if all_closed else ""
+        )
+        closed = [
+            item for item in all_closed
+            if _version_key(item.get("目标基线", "")) >= _version_key(cur)
         ]
         closed_campaign = (
             max(
@@ -818,6 +851,7 @@ def signoff_audit():
                 accepted.append((event, role, evidence))
 
         state_rows = []
+        pending_assignments = {}
         for role in roles:
             relevant_changes = {
                 change_id for change_id, meta in change_map.items()
@@ -867,6 +901,7 @@ def signoff_audit():
             if not relevant_changes:
                 state = "○ 当前无受影响变更"
             elif never or resign or pending:
+                pending_assignments[role_ids[role][0]] = sorted(set(never + resign + pending))
                 parts = []
                 if never:
                     parts.append("待签：" + ",".join(never))
@@ -886,7 +921,9 @@ def signoff_audit():
             "scope": scope,
             "campaign": campaign.get("Campaign ID", "无") if campaign else "无",
             "closed_campaign": closed_campaign,
+            "latest_closed_campaign": latest_closed_campaign,
             "events": rendered_events,
+            "pending_assignments": pending_assignments,
         }
 
     # v0.9.4 及更早版本：从“每角色最新基线”快照读取。
@@ -921,7 +958,9 @@ def signoff_audit():
     scope = [role for role in roles if role in required]
     return {
         "current": cur, "rows": rows, "mode": mode, "scope": scope,
-        "campaign": "legacy-snapshot", "closed_campaign": "", "events": [],
+        "campaign": "legacy-snapshot", "closed_campaign": "",
+        "latest_closed_campaign": "", "events": [],
+        "pending_assignments": {},
     }
 
 
