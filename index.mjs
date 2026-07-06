@@ -219,7 +219,7 @@ function parseArgs(argv) {
     preset: "tech",
     roleOverrides: {},
     emailOverrides: {},
-    gitRoot: "repo",
+    gitRoot: "workspace",
     setupWorktrees: true,
     roleTestCommits: false,
     remoteUrl: "",
@@ -251,6 +251,13 @@ function parseArgs(argv) {
     } else if (arg.startsWith("--git-root=")) {
       result.gitRoot = arg.slice("--git-root=".length);
       result._gitRootFromCli = true;
+    }
+    else if (arg.startsWith("--code-repo=")) {
+      // RC3：now=现在建代码仓（旧行为）；defer=默认只文档 Git，代码仓延后
+      const mode = arg.slice("--code-repo=".length);
+      result.gitRoot = mode === "now" ? "repo" : "workspace";
+      result._gitRootFromCli = true;
+      result._codeRepoFromCli = true;
     }
     else if (arg === "--worktrees") {
       result.setupWorktrees = true;
@@ -321,7 +328,10 @@ function parseArgs(argv) {
       result.preset = arg.slice("--roles=".length);
       result._presetFromCli = true;
     }
-    else if (arg.startsWith("--repo=")) result.repoName = arg.slice("--repo=".length);
+    else if (arg.startsWith("--repo=")) {
+      result.repoName = arg.slice("--repo=".length);
+      result._repoNameFromCli = true;
+    }
     else if (arg.startsWith("--role.")) {
       const [key, value = ""] = arg.slice("--role.".length).split("=");
       if (key && value) result.roleOverrides[normalizeRoleId(key)] = value;
@@ -332,6 +342,10 @@ function parseArgs(argv) {
       printHelp();
       process.exit(0);
     }
+  }
+  // RC3：显式命名代码仓（--repo）默认视为“现在建”，除非显式 --git-root/--code-repo。
+  if (result._repoNameFromCli && !result._gitRootFromCli) {
+    result.gitRoot = "repo";
   }
   return result;
 }
@@ -750,7 +764,7 @@ function buildReplacements(options, roles) {
       : `当前为 ${options.repoStrategy}：目标仓位于 10_代码仓库/${repoName}/；生成器启用 worktree 时已统一创建角色工作区。`,
     CODE_WORKSPACE_REPO_ENTRY: isReuse
       ? ""
-      : `,\n    { "path": "10_代码仓库/${repoName}", "name": "Code Repo" }`,
+      : `,\n    { "path": "10_代码仓库/${repoName}", "name": "💻 Code Repo" }`,
     REPO_NAME: repoName,
     ROLE_PRESET: options.preset,
     ROLE_PRESET_LABEL: preset.label,
@@ -1143,7 +1157,7 @@ function setupGitWorkspace(target, options, repoName, roles) {
   }
 
   const worktrees = [];
-  if (options.setupWorktrees) {
+  if (options.setupWorktrees && options.gitRoot === "repo") {
     const teamworkDir = path.join(gitTarget, "TeamWork");
     fs.mkdirSync(teamworkDir, { recursive: true });
     for (const role of roles.filter((item) => item.worktree)) {
@@ -1381,12 +1395,14 @@ async function main() {
     console.log(`Sprint 集成分支：${gitResult.sprintBranch}`);
     console.log(`角色 worktree：${gitResult.worktrees.length} 个`);
   }
-  console.log("\n下一步：");
-  console.log("1. 打开 00_项目导航/00_项目首页.md");
-  console.log("2. 检查 00_项目导航/02_角色与联系方式.md");
-  console.log("3. 确认本 Sprint 仓库策略，完善 10_代码仓库/00_仓库清单.md");
-  console.log("4. 校准 03_迭代运行/Sprint-0-启动/01_Sprint任务表与流程看板.md");
-  console.log("5. SM 从项目首页复制“首次团队启动通知”发群；这不是签核通知。");
+  console.log("\n下一步（启动与发现顺序）：");
+  console.log("1. 打开 00_项目导航/00_项目首页.md，按 30 分钟上手了解流程。");
+  console.log("2. 配置团队：完善 02_角色与联系方式.md 与 roles.config.json 的真实姓名/邮箱。");
+  console.log("3. 团队学习各角色“必读最小集”与知识库。");
+  console.log("4. 全员规范首签：SM 运行 signoff bootstrap → 成员 sign → SM close。");
+  console.log("5. 首签关闭后，SM 从首页复制“启动通知”发群，分配 Sprint 0 工作（≠签核通知）。");
+  console.log("6. Sprint 0 弄清目标与技术后，再按需建代码仓（见 Sprint-0-启动/仓库决策卡.md）：");
+  console.log("   node tools/setup-code-repo.mjs --strategy=create --repo=<name> --sprint=0");
   if (signoffResult.state === "published") {
     console.log("6. 首签 Notice 已生成：创建者推送后，SM 转发原文并跟踪 status；成员运行本人命令。");
   } else if (signoffResult.state === "guide") {

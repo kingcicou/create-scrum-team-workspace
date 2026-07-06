@@ -1580,3 +1580,37 @@ test("v0.10.5 advisory late signing, hard-mode enforcement, and audit-input drif
     fs.rmSync(sandbox, { recursive: true, force: true });
   }
 });
+
+test("RC3 default create initializes doc-git only and defers the code repo", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-rc3-"));
+  const target = path.join(sandbox, "workspace");
+  try {
+    // 默认：不传 --repo → 只初始化文档 Git，不建代码仓
+    runCli([target]);
+    assert.equal(git(target, ["rev-parse", "--is-inside-work-tree"]).trim(), "true");
+
+    const codeRoot = path.join(target, "10_代码仓库");
+    const skeleton = fs.readdirSync(codeRoot)
+      .map((name) => path.join(codeRoot, name))
+      .find((entry) => fs.statSync(entry).isDirectory());
+    assert.ok(skeleton, "应存在代码骨架目录");
+    assert.equal(fs.existsSync(path.join(skeleton, ".git")), false);
+
+    const card = path.join(target, "03_迭代运行", "Sprint-0-启动", "仓库决策卡.md");
+    assert.equal(fs.existsSync(card), true);
+    assert.match(fs.readFileSync(card, "utf8"), /状态.*pending/);
+
+    // 延后建仓：setup-code-repo create → 独立 Git + 文档仓忽略隔离
+    const tool = path.join(target, "tools", "setup-code-repo.mjs");
+    execFileSync(process.execPath, [tool, "--strategy=create", "--repo=my-app", "--sprint=0"], {
+      cwd: target,
+      encoding: "utf8",
+    });
+    const codeRepo = path.join(target, "10_代码仓库", "my-app");
+    assert.equal(git(codeRepo, ["rev-parse", "--is-inside-work-tree"]).trim(), "true");
+    assert.match(fs.readFileSync(path.join(target, ".gitignore"), "utf8"), /10_代码仓库\/my-app\//);
+    assert.equal(git(target, ["status", "--short"]).trim(), "");
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});

@@ -6,6 +6,33 @@
 
 ## [Unreleased]
 
+## [1.0.0-rc.3] - 2026-07-06
+
+### Changed
+
+- **代码仓从"创建时前置"改为"Sprint 0 后按需"**：默认 `create` 只初始化
+  **文档治理工作区（doc-git）**，不再创建代码仓；产物是"先把人和规范就位的
+  治理工作区"，代码仓退化为技术选型清晰后的下游动作。
+- 默认 `gitRoot=workspace`（文档 Git）。`--repo=<name>` 视为"现在建代码仓"
+  （兼容旧行为，测试与显式建仓路径不变）；新增 `--code-repo=now|defer`
+  显式切换；`--git-root=repo` 仍可用于旧式立即建仓。
+- 首签只依赖文档仓：默认路径下 `.team/signoffs` 位于文档工作区，与代码仓解耦。
+- 术语校正：Sprint 0 表述为"模板约定的启动与发现阶段"（Scrum Guide 未定义
+  Sprint 0）；首签证明"已确认阅读并接受角色责任"，非"已理解"，真正内化证据是
+  完成首个真实任务并满足 DoD。首页启动通知的前提改为"首签 Campaign 关闭之后"。
+
+### Added
+
+- `tools/setup-code-repo.mjs`：延后创建/登记代码仓，支持 `create/reuse/import/rewrite`。
+  代码仓位于文档仓内部时，**先把精确路径写入文档仓 `.gitignore`，再嵌套 `git init`**，
+  保证两者 Git 历史独立、文档仓不误跟踪代码；`import/rewrite` 不自动执行危险历史迁移。
+- Sprint 0 `仓库决策卡.md`（status=pending）：清晰说明先决条件与四策略创建命令。
+
+### Notes
+
+- 团队裁剪（full/lean/custom 与成员/帽子数据模型）为独立数据模型升级，延后至 RC4，
+  不在本轮范围，避免用"重复姓名/邮箱"破坏任务归属与签核审计。
+
 ## [1.0.0-rc.2] - 2026-07-06
 
 ### Fixed
