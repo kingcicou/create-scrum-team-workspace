@@ -16,7 +16,7 @@
 set -euo pipefail
 
 REPO="kingcicou/create-scrum-team-workspace"
-REF="${SCRUM_TEMPLATE_REF:-v1.0.0-rc.4}"
+REF="${SCRUM_TEMPLATE_REF:-v1.0.0-rc.5}"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 

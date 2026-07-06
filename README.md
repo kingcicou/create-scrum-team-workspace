@@ -38,13 +38,13 @@ irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0
 
 ```bash
 # 直接从 GitHub 执行（推荐，与参考仓库一致）
-npx -y github:kingcicou/create-scrum-team-workspace#v1.0.0-rc.4 my-project
+npx -y github:kingcicou/create-scrum-team-workspace#v1.0.0-rc.5 my-project
 
 # 仅预览不写盘
-npx -y github:kingcicou/create-scrum-team-workspace#v1.0.0-rc.4 my-project --dry-run
+npx -y github:kingcicou/create-scrum-team-workspace#v1.0.0-rc.5 my-project --dry-run
 
 # 交互式
-npx -y github:kingcicou/create-scrum-team-workspace#v1.0.0-rc.4 --interactive
+npx -y github:kingcicou/create-scrum-team-workspace#v1.0.0-rc.5 --interactive
 ```
 
 > 未发布到 npm registry，请使用 `github:` 前缀。

@@ -20,7 +20,7 @@
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
 $Repo = "kingcicou/create-scrum-team-workspace"
-$Ref  = if ($env:SCRUM_TEMPLATE_REF) { $env:SCRUM_TEMPLATE_REF } else { "v1.0.0-rc.4" }
+$Ref  = if ($env:SCRUM_TEMPLATE_REF) { $env:SCRUM_TEMPLATE_REF } else { "v1.0.0-rc.5" }
 
 Write-Host ""
 Write-Host "==============================================" -ForegroundColor Cyan

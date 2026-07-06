@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [1.0.0-rc.5] - 2026-07-06
+
 ### Added
 
 - **R4.4 任务 Owner 语义升级**：Sprint 任务执行表改为 `Owner（memberId） + 责任帽子`
