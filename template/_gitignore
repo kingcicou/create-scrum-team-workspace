@@ -5,6 +5,9 @@ build/
 .venv/
 __pycache__/
 
+# Rebuildable document indexes and signoff audit views
+00_项目导航/文档索引/
+
 # Local collaborative worktrees / clones（推荐用 TeamWork/）
 TeamWork/
 SprintWork/

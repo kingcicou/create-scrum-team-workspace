@@ -5,10 +5,10 @@
 # 模板逻辑唯一定义在 index.mjs，不在本脚本里重复实现。
 #
 # Usage (remote, 推荐):
-#   irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.10.7/create.ps1 | iex
+#   irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.1/create.ps1 | iex
 #
 # Usage (remote + 项目名):
-#   $env:PROJECT_NAME="my-project"; irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.10.7/create.ps1 | iex
+#   $env:PROJECT_NAME="my-project"; irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.1/create.ps1 | iex
 #
 # Usage (local clone):
 #   .\create.ps1 my-project --type=new --preset=tech
@@ -20,7 +20,7 @@
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
 $Repo = "kingcicou/create-scrum-team-workspace"
-$Ref  = if ($env:SCRUM_TEMPLATE_REF) { $env:SCRUM_TEMPLATE_REF } else { "v0.10.7" }
+$Ref  = if ($env:SCRUM_TEMPLATE_REF) { $env:SCRUM_TEMPLATE_REF } else { "v1.0.0-rc.1" }
 
 Write-Host ""
 Write-Host "==============================================" -ForegroundColor Cyan
@@ -31,13 +31,13 @@ Write-Host ""
 
 # 1. 检查 Node
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-    Write-Host "[ERROR] 未检测到 Node.js。请先安装 Node.js >= 18：https://nodejs.org/" -ForegroundColor Red
+    Write-Host "[ERROR] 未检测到 Node.js。请先安装 Node.js >= 24：https://nodejs.org/" -ForegroundColor Red
     return
 }
 
 $nodeMajor = [int](node -p "process.versions.node.split('.')[0]")
-if ($nodeMajor -lt 18) {
-    Write-Host "[ERROR] Node.js 版本过低（当前 $(node -v)），需要 >= 18。" -ForegroundColor Red
+if ($nodeMajor -lt 24) {
+    Write-Host "[ERROR] Node.js 版本过低（当前 $(node -v)），需要 >= 24。" -ForegroundColor Red
     return
 }
 

@@ -885,7 +885,7 @@ test("v0.9.3 keeps signoff orchestration with SM and normalizes role scope", () 
         "| CHG-100 | V1.5 | 2026-07-03 | 别名匹配验证 | SM,FS |",
       )
       .replace(
-        /\| SIGN-INIT-001 \| initial \| V1\.5 \| BASELINE-V1\.5 \| ALL \| [^|]+ \| 由 SM 确认 \| planned \| 由 SM 运行 signoff prepare \|/,
+        /\| 由 bootstrap 生成 \| initial \| V1\.5 \| 按全局审计逐角色生成 \| ALL \| 创建时\/建库后 \| 默认 \+72h advisory \| 待创建 \| 创建者运行一次 `signoff bootstrap` \|/,
         "| SIGN-ALIAS-001 | incremental | V1.5 | CHG-100 | SM,FS | 2026-07-03 | 2026-07-04 | open | — |",
       );
     fs.writeFileSync(manualPath, roleManual, "utf8");
@@ -982,7 +982,7 @@ test("v0.9.5 traces catch-up coverage and keeps rebaseline history honest", () =
 | CHG-140 | V1.4 | 2026-07-03 | CI 证据契约 | FS/DevOps |`,
       )
       .replace(
-        /\| SIGN-INIT-001 \| initial \| V1\.5 \| BASELINE-V1\.5 \| ALL \| [^|]+ \| 由 SM 确认 \| planned \| 由 SM 运行 signoff prepare \|/,
+        /\| 由 bootstrap 生成 \| initial \| V1\.5 \| 按全局审计逐角色生成 \| ALL \| 创建时\/建库后 \| 默认 \+72h advisory \| 待创建 \| 创建者运行一次 `signoff bootstrap` \|/,
         "| SIGN-CATCHUP-001 | catch-up | V1.4 | CHG-120,CHG-140 | FS | 2026-07-03 | 2026-07-04 | open | — |",
       )
       .replace(
@@ -1083,7 +1083,7 @@ test("v0.9.6 detects cosigning and excludes anomalous coverage from verified", (
 | CHG-200 | V1.2 | 2026-07-02 | CI 变化触发 | FS/DevOps |`,
       )
       .replace(
-        /\| SIGN-INIT-001 \| initial \| V1\.5 \| BASELINE-V1\.5 \| ALL \| [^|]+ \| 由 SM 确认 \| planned \| 由 SM 运行 signoff prepare \|/,
+        /\| 由 bootstrap 生成 \| initial \| V1\.5 \| 按全局审计逐角色生成 \| ALL \| 创建时\/建库后 \| 默认 \+72h advisory \| 待创建 \| 创建者运行一次 `signoff bootstrap` \|/,
         "| SIGN-096-001 | incremental | V1.5 | CHG-100,CHG-200 | FS | 2026-07-03 | 2026-07-04 | open | — |",
       )
       .replace(
@@ -1190,6 +1190,53 @@ test("release entrypoints and injected tool version stay pinned to the package v
   // P-LOW-2：模板用占位符，生成时由 index.mjs 注入 package.json 版本（生成项目无根 package.json）。
   assert.match(read("template/tools/signoff.mjs"), /const TOOL_VERSION = "\{\{TOOL_VERSION\}\}"/);
   assert.match(read("index.mjs"), /TOOL_VERSION: CLI_VERSION/);
+});
+
+test("initial signoff auto-publishes only from a traceable workspace fact source", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-bootstrap-"));
+  const target = path.join(sandbox, "workspace");
+  const roleIds = ["po", "sm", "tl", "midbe", "srfe", "midfe", "fs"];
+  try {
+    const output = runCli([
+      target,
+      "--git-root=workspace",
+      "--no-worktrees",
+      ...roleIds.map((id) => `--email.${id}=${id}@example.test`),
+    ]);
+    assert.match(output, /首签已发起：SIGN-\d{8}-001/);
+    const campaignDir = path.join(target, ".team", "signoffs", "campaigns");
+    const noticeDir = path.join(target, ".team", "signoffs", "notices");
+    const campaigns = fs.readdirSync(campaignDir);
+    const notices = fs.readdirSync(noticeDir);
+    assert.equal(campaigns.length, 1);
+    assert.deepEqual(notices, campaigns);
+
+    const campaign = JSON.parse(fs.readFileSync(path.join(campaignDir, campaigns[0]), "utf8"));
+    assert.equal(campaign.mode, "initial");
+    assert.equal(campaign.scopeSource, "global-audit");
+    assert.equal(campaign.dueMode, "advisory");
+    assert.match(campaign.dueAt, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+    assert.deepEqual(Object.keys(campaign.assignments).sort(), roleIds.sort());
+    assert.match(git(target, ["log", "-2", "--format=%s"]), /signoff\(publish\):/);
+    assert.match(git(target, ["log", "-2", "--format=%s"]), /signoff\(prepare\):/);
+    assert.equal(git(target, ["status", "--short"]), "");
+
+    const tool = path.join(target, "tools", "signoff.mjs");
+    assert.throws(
+      () => execFileSync(process.execPath, [
+        tool, "bootstrap", "--actor=sm", "--due=+72h",
+      ], { cwd: target, stdio: "pipe" }),
+      (error) => error.status === 2,
+    );
+
+    const guideTarget = path.join(sandbox, "guide");
+    const guide = runCli([guideTarget, "--no-git", "--no-worktrees"]);
+    assert.match(guide, /首签尚未发起/);
+    assert.match(guide, /node tools\/signoff\.mjs bootstrap --actor=sm --due=\+72h/);
+    assert.equal(fs.existsSync(path.join(guideTarget, ".team")), false);
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
 });
 
 test("v0.10.4 publishes immutable notices before signoff", () => {

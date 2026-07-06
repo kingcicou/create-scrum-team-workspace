@@ -70,12 +70,28 @@ function compactDate(value) {
   return value.replaceAll("-", "");
 }
 
+function formatDueInstant(instant, timezone) {
+  if (timezone === "Asia/Shanghai") {
+    return new Date(instant + 8 * 3_600_000).toISOString().slice(0, 16).replace("T", " ");
+  }
+  if (timezone === "UTC") {
+    return new Date(instant).toISOString().slice(0, 16).replace("T", " ");
+  }
+  return new Date(instant).toISOString();
+}
+
 function parseDue(value, timezone) {
   const due = String(value || "").trim();
   if (!due) fail("prepare 必须提供 --due=<未来时间>，不得使用待确认或群聊补写。");
   let instant;
+  let normalized = due;
+  const relative = /^\+(\d+)(m|h|d)$/.exec(due);
   const local = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})(?::(\d{2}))?$/.exec(due);
-  if (local) {
+  if (relative) {
+    const factors = { m: 60_000, h: 3_600_000, d: 86_400_000 };
+    instant = Date.now() + Number(relative[1]) * factors[relative[2]];
+    normalized = formatDueInstant(instant, timezone);
+  } else if (local) {
     const offsets = { "Asia/Shanghai": "+08:00", UTC: "Z" };
     const offset = offsets[timezone];
     if (!offset) {
@@ -86,7 +102,7 @@ function parseDue(value, timezone) {
     instant = Date.parse(due);
   }
   if (!Number.isFinite(instant)) fail(`无法解析截止时间：${due}`);
-  return { due, instant };
+  return { due: normalized, instant };
 }
 
 function validateDue(value, timezone) {
@@ -591,11 +607,11 @@ function evaluate(context, campaignId, print = true) {
 function prepare(context, options) {
   requireActor(options, "sm");
   const sm = roleIdentity(context, "sm");
-  withMutationLock(context, () => {
+  return withMutationLock(context, () => {
     ensureCleanAuditSource(context, "prepare");
     const timezone = String(options.timezone || "Asia/Shanghai");
     const dueMode = options["due-mode"] === "hard" ? "hard" : "advisory";
-    // hard 模式强制未来截止；advisory 为非约束提示，允许追追/历史截止。
+    // hard 模式强制未来截止；advisory 为非约束提示，允许逾期/历史截止。
     const dueAt = dueMode === "hard"
       ? validateDue(options.due, timezone)
       : parseDue(options.due, timezone).due;
@@ -604,9 +620,11 @@ function prepare(context, options) {
     let target = String(options.target || "").trim();
     let mode = options.mode || "incremental";
     let source = options.source || null;
-    if (options["from-audit"]) {
+    if (options["from-audit"] || options.bootstrap) {
       if (!audit.pendingCount || !Object.keys(audit.pendingAssignments || {}).length) {
-        fail("全局审计没有待处理角色，无需创建纠偏 Campaign。");
+        fail(options.bootstrap
+          ? "全局审计没有首签待处理角色；不得重复创建首签 Campaign。"
+          : "全局审计没有待处理角色，无需创建纠偏 Campaign。");
       }
       assignments = Object.fromEntries(
         Object.entries(audit.pendingAssignments).map(([roleId, coverage]) => [
@@ -615,7 +633,7 @@ function prepare(context, options) {
         ]),
       );
       target ||= audit.currentBaseline;
-      mode = "corrective";
+      mode = options.bootstrap ? "initial" : "corrective";
       source ||= audit.closedCampaignId || null;
     } else {
       const coverage = splitValues(options.coverage);
@@ -640,14 +658,19 @@ function prepare(context, options) {
       dueMode,
       targetBaseline: target,
       sourceCampaignId: source,
-      scopeSource: options["from-audit"] ? "global-audit" : "explicit",
+      scopeSource: options["from-audit"] || options.bootstrap ? "global-audit" : "explicit",
       auditGeneratedAt: audit.generatedAt,
       auditSourceHead: audit.sourceHead || null,
       auditScopeHash: scopeHash(audit),
       repositoryHead: repoHead(context),
       repositoryTree: repoTree(context),
       auditSourceState: "clean",
-      purpose: options.purpose || (options["from-audit"] ? "纠正全局签核缺口" : "确认受影响规范变更"),
+      purpose: options.purpose
+        || (options.bootstrap
+          ? "完成团队入队首签"
+          : options["from-audit"]
+            ? "纠正全局签核缺口"
+            : "确认受影响规范变更"),
       summary: options.summary || "按 Campaign 的逐角色范围完成阅读与签核。",
       readScope: splitValues(options.read || "本人角色卡;责任表;周期任务清单;角色行动手册指定变更章节"),
       dueAt,
@@ -668,7 +691,40 @@ function prepare(context, options) {
     commitOnly(context, file, `signoff(prepare): ${campaignId} ${target}`, sm);
     console.log(`[OK] Campaign 已创建并由 SM 提交：${relativeToRepo(context, file)}`);
     console.log(`[INFO] Campaign ID：${campaignId}`);
+    return campaignId;
   });
+}
+
+function bootstrap(context, options) {
+  requireActor(options, "sm");
+  const campaignsDir = path.join(context.store, "campaigns");
+  const existing = fs.existsSync(campaignsDir)
+    ? fs.readdirSync(campaignsDir).filter((name) => name.endsWith(".json"))
+    : [];
+  if (existing.length) {
+    fail("bootstrap 仅用于首次入队签核，当前仓库已有 Campaign；后续请使用 prepare/publish。");
+  }
+
+  const audit = globalAuditOrFail(context);
+  const configuredRoles = Object.keys(context.roles).sort();
+  const pendingRoles = Object.keys(audit.pendingAssignments || {}).map(normalizeRole).sort();
+  const absent = configuredRoles.filter((roleId) => !pendingRoles.includes(roleId));
+  if (absent.length) {
+    fail(`首签审计未覆盖全部配置角色：${absent.join(",")}；请先修正角色手册与审计事实源。`);
+  }
+
+  const campaignId = prepare(context, {
+    ...options,
+    bootstrap: true,
+    mode: "initial",
+    due: options.due || "+72h",
+    "due-mode": options["due-mode"] || "advisory",
+    purpose: options.purpose || "完成团队入队首签",
+    summary: options.summary || "确认本人角色卡、责任表、周期任务清单及签核操作规则。",
+    read: options.read || "本人角色卡;治理责任表;周期任务清单;签核编排协议与本人命令",
+  });
+  publish(context, { ...options, campaign: campaignId, actor: "sm" });
+  console.log(`[OK] 首签已发起：${campaignId}。创建者推送后，SM 仅跟踪 status 与 close。`);
 }
 
 function sign(context, options) {
@@ -846,8 +902,13 @@ function notify() {
 
 try {
   const { command, options } = parseArgs(process.argv.slice(2));
+  if (command === "--version" || command === "version") {
+    console.log(TOOL_VERSION);
+    process.exit(0);
+  }
   const context = loadContext(options);
-  if (command === "prepare") prepare(context, options);
+  if (command === "bootstrap") bootstrap(context, options);
+  else if (command === "prepare") prepare(context, options);
   else if (command === "sign") sign(context, options);
   else if (command === "close") close(context, options);
   else if (command === "publish") publish(context, options);

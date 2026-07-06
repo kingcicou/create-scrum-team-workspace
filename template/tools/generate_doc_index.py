@@ -495,7 +495,10 @@ def stale_audit(docs):
         elif badc > 0 and not scope:
             next_action = "当前无活动批次但仍有待处理；SM 立即建立 incremental/corrective 批次。"
         elif mode == "initial":
-            next_action = "SM 按 09 §10.1 发起首签；成员在事件台账追加本人 Event ID。"
+            next_action = (
+                "项目创建者/FS 按 09 §10.1 运行一次 bootstrap 并推送；"
+                "SM 原样转发 Notice、跟踪并关闭，成员运行本人 sign 命令。"
+            )
         elif mode == "full-rebaseline":
             next_action = "SM 按 09 §10.6 发起全量重基线；恢复当前有效性但保留旧历史缺口。"
         elif scope == ["SM"]:

@@ -6,7 +6,7 @@
 # 模板逻辑唯一定义在 index.mjs，不在本脚本里重复实现。
 #
 # Usage (remote, 推荐):
-#   bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.10.7/create.sh) my-project
+#   bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.1/create.sh) my-project
 #
 # Usage (local clone):
 #   ./create.sh my-project --type=new --preset=tech
@@ -16,7 +16,7 @@
 set -euo pipefail
 
 REPO="kingcicou/create-scrum-team-workspace"
-REF="${SCRUM_TEMPLATE_REF:-v0.10.7}"
+REF="${SCRUM_TEMPLATE_REF:-v1.0.0-rc.1}"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 
@@ -37,12 +37,12 @@ banner
 
 # 1. 检查 Node
 if ! command -v node >/dev/null 2>&1; then
-  die "未检测到 Node.js。请先安装 Node.js >= 18：https://nodejs.org/"
+  die "未检测到 Node.js。请先安装 Node.js >= 24：https://nodejs.org/"
 fi
 
 NODE_MAJOR=$(node -p "process.versions.node.split('.')[0]")
-if [ "$NODE_MAJOR" -lt 18 ]; then
-  die "Node.js 版本过低（当前 v$(node -v | sed 's/^v//')），需要 >= 18。"
+if [ "$NODE_MAJOR" -lt 24 ]; then
+  die "Node.js 版本过低（当前 v$(node -v | sed 's/^v//')），需要 >= 24。"
 fi
 
 # 2. 检查 npx

@@ -11,19 +11,19 @@
 ### 方式一：Bash 一键执行（macOS / Linux / WSL / Git Bash）
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.10.7/create.sh) my-project
+bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.1/create.sh) my-project
 ```
 
 可叠加任意 CLI 选项：
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.10.7/create.sh) my-project --type=new --preset=tech
+bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.1/create.sh) my-project --type=new --preset=tech
 ```
 
 ### 方式二：PowerShell 一键执行（Windows）
 
 ```powershell
-irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.10.7/create.ps1 | iex
+irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.1/create.ps1 | iex
 ```
 
 执行后会进入交互式创建。也可提前设环境变量传项目名与额外参数：
@@ -31,20 +31,20 @@ irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.1
 ```powershell
 $env:PROJECT_NAME="my-project"
 $env:SCRUM_TEMPLATE_ARGS="--type=new --preset=tech"
-irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v0.10.7/create.ps1 | iex
+irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.1/create.ps1 | iex
 ```
 
-### 方式三：npx（全平台，需 Node.js >= 18）
+### 方式三：npx（全平台，需 Node.js >= 24）
 
 ```bash
 # 直接从 GitHub 执行（推荐，与参考仓库一致）
-npx -y github:kingcicou/create-scrum-team-workspace#v0.10.7 my-project
+npx -y github:kingcicou/create-scrum-team-workspace#v1.0.0-rc.1 my-project
 
 # 仅预览不写盘
-npx -y github:kingcicou/create-scrum-team-workspace#v0.10.7 my-project --dry-run
+npx -y github:kingcicou/create-scrum-team-workspace#v1.0.0-rc.1 my-project --dry-run
 
 # 交互式
-npx -y github:kingcicou/create-scrum-team-workspace#v0.10.7 --interactive
+npx -y github:kingcicou/create-scrum-team-workspace#v1.0.0-rc.1 --interactive
 ```
 
 > 未发布到 npm registry，请使用 `github:` 前缀。
@@ -76,8 +76,10 @@ node index.mjs my-project --type=new --preset=tech
 - SM/教练可直接生成适合群聊转发的快报、Sprint 流程全景和单角色状态卡。
 - SM 查询入口提供“问题→模板”选择和真实示例；`review-status.mjs` 跨平台检查
   Review/Retro 追加名单与重复标题。
-- SM 对角色手册签核负责编排和闭环；`prepare --from-audit` 自动生成逐角色纠偏
-  范围并强制未来截止，`publish` 提交不可变 Notice；成员命令摘要不匹配时
+- 首次入队签核支持 `bootstrap`：项目创建者确认角色和 workspace Git 后，一次生成
+  initial Campaign 与不可变 Notice；SM 原样转发、跟踪和关闭，成员只执行本人命令。
+- SM 对后续角色手册签核负责编排和闭环；`prepare --from-audit` 自动生成逐角色纠偏
+  范围，`publish` 提交不可变 Notice；成员命令摘要不匹配时
   `sign` 拒绝，项目全局仍有缺口时 `close` 也会拒绝。
 - Sprint 经验回流采用“来源、L2 知识、L3 操作、验证、发布、项目闭环”六层
   DoD，避免只修项目或模板功能却遗漏知识传承。
@@ -174,6 +176,8 @@ node index.mjs --config=./scrum.config.json
   "pushRemote": false,
   "defaultBranch": "main",
   "sprintNumber": 1,
+  "initialSignoff": "auto",
+  "initialSignoffDue": "+72h",
   "roles": { "midfe": "Aurora" },
   "emails": { "po": "po@example.com" }
 }
@@ -209,6 +213,23 @@ node index.mjs acme-ark \
 
 `--push` 会拒绝 `@example.com` 等占位邮箱；请先在配置文件或
 `--email.<slot>` 中为全部角色填写可追溯邮箱。
+
+### 首次入队签核
+
+默认 `--initial-signoff=auto --initial-signoff-due=+72h`。当使用
+`--git-root=workspace`、全员邮箱真实且创建者环境有 Python 时，生成器会自动运行：
+
+```bash
+node tools/signoff.mjs bootstrap --actor=sm --due=+72h
+```
+
+它从全局审计生成全员逐角色范围，并提交 Campaign 与唯一正式 Notice。创建者负责
+推送；SM 原样转发 Notice、运行 `status/close`；成员拉取后运行 Notice 中本人
+`sign` 命令。普通成员只需 Node.js 与 Git，Python 仅用于创建者/SM 的实时审计。
+
+`repo/none/reuse`、占位邮箱或缺 Python 时自动降级为 `guide`，不会假装首签已发起。
+先将项目规范纳入可追溯 Git 事实源，再执行上述命令。可显式使用
+`--initial-signoff=guide|off`。
 
 查看全部角色套装：
 
@@ -324,7 +345,8 @@ rm -rf verify-local
 
 ## 测试
 
-零依赖，使用 Node 内置 `node:test` runner。需要 Node.js ≥ 18、Git ≥ 2.28：
+零 npm 运行时依赖，使用 Node 内置 `node:test` runner。需要 Node.js ≥ 24、Git ≥ 2.28；
+创建者/SM 执行审计型签核命令时还需 Python 3：
 
 ```bash
 npm test

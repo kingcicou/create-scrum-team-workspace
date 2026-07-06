@@ -226,6 +226,8 @@ function parseArgs(argv) {
     pushRemote: false,
     defaultBranch: "main",
     sprintNumber: 1,
+    initialSignoff: "auto",
+    initialSignoffDue: "+72h",
     interactive: false,
     force: false,
     listPresets: false,
@@ -285,6 +287,14 @@ function parseArgs(argv) {
     else if (arg.startsWith("--sprint=")) {
       result.sprintNumber = Number(arg.slice("--sprint=".length));
       result._sprintFromCli = true;
+    }
+    else if (arg.startsWith("--initial-signoff=")) {
+      result.initialSignoff = arg.slice("--initial-signoff=".length);
+      result._initialSignoffFromCli = true;
+    }
+    else if (arg.startsWith("--initial-signoff-due=")) {
+      result.initialSignoffDue = arg.slice("--initial-signoff-due=".length);
+      result._initialSignoffDueFromCli = true;
     }
     else if (arg === "--list-presets") result.listPresets = true;
     else if (arg === "--interactive" || arg === "-i") result.interactive = true;
@@ -363,6 +373,12 @@ function loadConfigFile(options) {
   if (typeof raw.pushRemote === "boolean" && !options._pushFromCli) options.pushRemote = raw.pushRemote;
   if (raw.defaultBranch && !options._defaultBranchFromCli) options.defaultBranch = String(raw.defaultBranch);
   if (raw.sprintNumber && !options._sprintFromCli) options.sprintNumber = Number(raw.sprintNumber);
+  if (raw.initialSignoff && !options._initialSignoffFromCli) {
+    options.initialSignoff = String(raw.initialSignoff);
+  }
+  if (raw.initialSignoffDue && !options._initialSignoffDueFromCli) {
+    options.initialSignoffDue = String(raw.initialSignoffDue);
+  }
   if (raw.roles && typeof raw.roles === "object") {
     for (const [key, value] of Object.entries(raw.roles)) {
       const id = normalizeRoleId(key);
@@ -456,6 +472,23 @@ async function completeOptions(options) {
           },
       options.gitRoot,
     );
+    options.initialSignoff = await askChoice(
+      rl,
+      "首次入队签核",
+      {
+        auto: "条件满足时自动生成 Campaign 与 Notice（推荐）",
+        guide: "只生成后续操作指引",
+        off: "暂不启用",
+      },
+      options.initialSignoff,
+    );
+    if (options.initialSignoff !== "off") {
+      options.initialSignoffDue = await ask(
+        rl,
+        "首签提醒截止（+72h 或带时区的时间）",
+        options.initialSignoffDue,
+      );
+    }
     options.preset = await askChoice(
       rl,
       "角色命名套装",
@@ -517,6 +550,7 @@ async function completeOptions(options) {
     console.log(`来源仓库：${options.sourceRepo || "无 / 待确认"}`);
     console.log(`代码仓库：${options.repoName || `${slug(options.projectName)}-app`}`);
     console.log(`Git 模式：${options.gitRoot}`);
+    console.log(`首次签核：${options.initialSignoff}（${options.initialSignoffDue}）`);
     console.log(`角色工作区：${options.setupWorktrees ? "统一创建" : "不创建"}`);
     console.log(`角色测试提交：${options.roleTestCommits ? "创建" : "不创建"}`);
     console.log(`远端：${options.remoteUrl || "不配置"}${options.pushRemote ? "（生成后推送）" : ""}`);
@@ -785,6 +819,8 @@ function buildReplacements(options, roles) {
         pushRemote: false,
         defaultBranch: options.defaultBranch,
         sprintNumber: options.sprintNumber,
+        initialSignoff: options.initialSignoff,
+        initialSignoffDue: options.initialSignoffDue,
         roles: Object.fromEntries(roles.map((role) => [role.id, role.name])),
         emails: Object.fromEntries(roles.map((role) => [role.id, role.email])),
         roleDetails: roles.map(({ id, name, email, roleCode, title, hats, skills, backup, worktree, dirName, branchName }) => ({
@@ -1075,6 +1111,54 @@ function setupGitWorkspace(target, options, repoName, roles) {
   return { gitTarget, worktrees, sprintBranch };
 }
 
+function findPython() {
+  const candidates = process.env.PYTHON
+    ? [[process.env.PYTHON, []]]
+    : process.platform === "win32"
+      ? [["python", []], ["py", ["-3"]]]
+      : [["python3", []], ["python", []]];
+  for (const [command, prefix] of candidates) {
+    const result = spawnSync(command, [...prefix, "--version"], { encoding: "utf8" });
+    if (!result.error && result.status === 0) return command;
+  }
+  return "";
+}
+
+function setupInitialSignoff(target, options, roles, gitResult) {
+  if (options.initialSignoff === "off") return { state: "off", reason: "已由创建者关闭" };
+  const placeholderRoles = roles.filter((role) => /@example\.com$/i.test(role.email));
+  const python = findPython();
+  const eligible = options.initialSignoff === "auto"
+    && options.gitRoot === "workspace"
+    && Boolean(gitResult.gitTarget)
+    && placeholderRoles.length === 0
+    && Boolean(python);
+  if (!eligible) {
+    const reasons = [];
+    if (options.gitRoot !== "workspace") reasons.push("项目规范尚未纳入 workspace Git");
+    if (placeholderRoles.length) reasons.push(`仍有占位邮箱：${placeholderRoles.map((role) => role.id).join(",")}`);
+    if (!python) reasons.push("创建者环境缺少 Python，无法生成首次全局审计");
+    if (options.initialSignoff === "guide") reasons.push("创建者选择 guide 模式");
+    return { state: "guide", reason: reasons.join("；") || "当前条件不满足自动发起" };
+  }
+
+  const tool = path.join(target, "tools", "signoff.mjs");
+  const result = spawnSync(
+    process.execPath,
+    [tool, "bootstrap", "--actor=sm", `--due=${options.initialSignoffDue}`],
+    { cwd: target, encoding: "utf8" },
+  );
+  if (result.status !== 0) {
+    const detail = (result.stderr || result.stdout || "").trim();
+    throw new Error(`首签 bootstrap 失败：${detail}`);
+  }
+  process.stdout.write(result.stdout);
+  if (options.pushRemote) {
+    runGit(gitResult.gitTarget, ["push", "origin", options.defaultBranch]);
+  }
+  return { state: "published", reason: "Campaign 与不可变 Notice 已提交" };
+}
+
 function printHelp() {
   console.log(`create-scrum-team-workspace
 
@@ -1095,6 +1179,9 @@ function printHelp() {
   --push | --no-push            是否将 main、sprint 和角色分支推送到 origin
   --default-branch=<name>       默认分支名，默认 main
   --sprint=<number>             初始 Sprint 编号，默认 1
+  --initial-signoff=auto|guide|off
+                                 首签：条件满足时自动发起、仅给指引或关闭；默认 auto
+  --initial-signoff-due=+72h    首签提醒截止，支持 +Nm/+Nh/+Nd 或 ISO 时间
   --config=<path.json>           从 JSON 配置文件读取参数（CLI 优先级更高）
   --interactive | -i             交互式创建（含摘要确认）
   --dry-run | -n                 仅预览将创建的文件，不写入磁盘
@@ -1124,6 +1211,8 @@ function printHelp() {
     "pushRemote": false,
     "defaultBranch": "main",
     "sprintNumber": 1,
+    "initialSignoff": "auto",
+    "initialSignoffDue": "+72h",
     "roles": { "midfe": "Aurora" },
     "emails": { "po": "po@example.com" }
   }
@@ -1172,6 +1261,7 @@ async function main() {
     options.setupWorktrees = false;
   }
   if (!["workspace", "repo", "none"].includes(options.gitRoot)) options.gitRoot = "repo";
+  if (!["auto", "guide", "off"].includes(options.initialSignoff)) options.initialSignoff = "auto";
   if (options.gitRoot !== "repo" && !options._worktreesFromCli) options.setupWorktrees = false;
   if (!options.setupWorktrees) options.roleTestCommits = false;
 
@@ -1198,6 +1288,7 @@ async function main() {
     console.log(`[dry-run] Git 模式：${options.gitRoot}`);
     console.log(`[dry-run] 角色 worktree：${options.setupWorktrees ? "5 个" : "不创建"}`);
     console.log(`[dry-run] 角色测试提交：${options.roleTestCommits ? "创建" : "不创建"}`);
+    console.log(`[dry-run] 首签：${options.initialSignoff}（提醒截止 ${options.initialSignoffDue}）`);
     console.log(`[dry-run] 远端：${options.remoteUrl || "不配置"}${options.pushRemote ? "（将推送）" : ""}`);
     console.log(`[dry-run] 计划创建 ${plan.filter((i) => i.type === "dir").length} 个目录、${plan.filter((i) => i.type === "file").length} 个文件。`);
     for (const item of plan) {
@@ -1210,6 +1301,7 @@ async function main() {
   ensureCanWrite(target, options.force);
   applyTemplatePlan(plan, replacements);
   const gitResult = setupGitWorkspace(target, options, replacements.REPO_NAME, roles);
+  const signoffResult = setupInitialSignoff(target, options, roles, gitResult);
 
   console.log(`\n已创建 Scrum 团队协同工作区：${target}`);
   console.log(`项目类型：${replacements.PROJECT_TYPE_LABEL}`);
@@ -1226,6 +1318,15 @@ async function main() {
   console.log("2. 检查 00_项目导航/02_角色与联系方式.md");
   console.log("3. 确认本 Sprint 仓库策略，完善 10_代码仓库/00_仓库清单.md");
   console.log("4. 校准 03_迭代运行/Sprint-0-启动/01_Sprint任务表与流程看板.md");
+  if (signoffResult.state === "published") {
+    console.log("5. 首签 Notice 已生成：创建者推送后，SM 转发原文并跟踪 status；成员运行本人命令。");
+  } else if (signoffResult.state === "guide") {
+    console.log(`5. 首签尚未发起（${signoffResult.reason}）。`);
+    console.log("   先将整个项目工作区纳入 Git、提交角色事实源并确认真实邮箱，再运行：");
+    console.log(`   node tools/signoff.mjs bootstrap --actor=sm --due=${options.initialSignoffDue}`);
+  } else {
+    console.log("5. 首签自动化已关闭；需要时由创建者运行 signoff bootstrap。");
+  }
 }
 
 main().catch((error) => {

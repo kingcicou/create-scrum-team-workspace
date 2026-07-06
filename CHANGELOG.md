@@ -6,6 +6,36 @@
 
 ## [Unreleased]
 
+## [1.0.0-rc.1] - 2026-07-06
+
+### Added
+
+- 新增 `signoff bootstrap --actor=sm --due=+72h`：从实时全局审计建立唯一首签
+  initial Campaign，并连续提交不可变 Notice；已有 Campaign、角色覆盖不全、事实源
+  不干净或审计不可用时拒绝。
+- 生成器新增 `--initial-signoff=auto|guide|off` 与
+  `--initial-signoff-due=<相对/绝对时间>`。workspace Git、真实角色邮箱及 Python
+  均就绪时自动发起；`repo/none/reuse`、占位邮箱或缺 Python 时安全降级为操作指引。
+- `signoff.mjs version` / `--version` 输出生成时注入的工具版本。
+- 新增首签自动发布、重复 bootstrap 拒绝及无 Git 降级的回归测试。
+
+### Changed
+
+- 首签职责明确为“创建者/FS 准备并推送、工具生成范围和 Notice、SM 原样转发与
+  跟踪关闭、成员本人执行”；SM 不再临场重写首签通知。
+- 截止参数支持 `+Nm/+Nh/+Nd`；首签默认 `+72h` advisory。
+- RC 支持基线调整为 Node.js >=24，CI 验证 Node 24/26 × Linux/Windows/macOS。
+- 首页、09 操作入口、角色手册、SM 作战手册及 Scrum/12 原位升级，未新增重复规范。
+
+### Known limits
+
+- 自动首签只在整个项目工作区已进入同一 Git 事实源时执行；默认独立代码仓模式只
+  给出引导。普通成员签核仅需 Node/Git，创建者和 SM 的实时审计仍需 Python。
+- 本地互斥锁只保护同一 Git common-dir；跨机器并发仍依赖 pull/push、分支保护和
+  团队串行约定。
+- 本版本为 RC；建议至少用一个全新项目完成 create → bootstrap → 全员 sign →
+  close → 干净克隆复算后再发布 `v1.0.0`。
+
 ## [0.10.7] - 2026-07-06
 
 ### Fixed
@@ -18,6 +48,14 @@
 - 测试去除日期耦合：`v0.10.4 publishes immutable notices` 用当日本地日期动态拼接
   Campaign（`SIGN-<today>-001`）与 Event（`EVT-PO-<today>-001`）ID，不再硬编码
   `20260704`；此前非 2026-07-04 当日运行会因 ID 不匹配导致 CI 失败。
+
+## [0.10.6] - 2026-07-05
+
+### Fixed
+
+- 首次尝试修复 Windows Python 中文 stdout 编码，向索引生成器增加 UTF-8 环境处理。
+  该提交未完全消除不同 Windows runner 的编码差异，后由 v0.10.7 的脚本内
+  `stdout/stderr.reconfigure()` 取代；保留本条用于补齐已发布 tag 的历史。
 
 ## [0.10.5] - 2026-07-04
 
