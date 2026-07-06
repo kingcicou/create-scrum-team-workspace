@@ -1033,9 +1033,14 @@ def overview(docs):
 
 
 def main():
-    # 在Windows上确保UTF-8输出
-    if sys.stdout.encoding.lower() != 'utf-8':
-        sys.stdout.reconfigure(encoding='utf-8')
+    # 仅在Windows上配置UTF-8输出（其他平台默认已是UTF-8）
+    if sys.platform == 'win32':
+        try:
+            import io
+            if sys.stdout.encoding.lower() != 'utf-8':
+                sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+        except (AttributeError, TypeError):
+            pass  # 某些环境下可能不支持，安全忽略
     
     docs = collect()
     overview(docs)
