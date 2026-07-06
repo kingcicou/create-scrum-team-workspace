@@ -1803,3 +1803,70 @@ test("R4.3 team.mjs list and validate render the member-hat view", () => {
     fs.rmSync(sandbox, { recursive: true, force: true });
   }
 });
+
+test("R4.3b signoff resolves SM from v2 scrum.scrumMaster (not hardcoded sm)", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-r43b-sm-"));
+  const target = path.join(sandbox, "workspace");
+  try {
+    runCli([target, "--git-root=workspace", "--no-worktrees"]);
+    const cfgFile = path.join(target, "00_项目导航", "roles.config.json");
+    const cfg = JSON.parse(fs.readFileSync(cfgFile, "utf8"));
+    const v2 = {
+      ...cfg,
+      schemaVersion: 2,
+      model: "member-hat-v1",
+      members: [
+        { id: "po-a", name: "Jobs", email: "po@example.test", status: "active" },
+        { id: "sm-a", name: "Sutherland", email: "sm@example.test", status: "active" },
+        { id: "dev-a", name: "Fowler", email: "tl@example.test", status: "active" },
+      ],
+      scrum: { productOwner: "po-a", scrumMaster: "sm-a", developers: ["dev-a"] },
+      hats: { tl: { label: "TL" } },
+      assignments: [{ memberId: "dev-a", hatId: "tl", kind: "primary", status: "active" }],
+      roles: {},
+      emails: {},
+      roleDetails: [],
+    };
+    fs.writeFileSync(cfgFile, `${JSON.stringify(v2, null, 2)}\n`, "utf8");
+    const tool = path.join(target, "tools", "signoff.mjs");
+
+    // 传入 v2 的 SM（sm-a）应通过角色门禁；后续即使因 Python 审计不支持 v2 失败，
+    // 错误也不应是“只能由角色 sm 执行”。
+    assert.throws(
+      () => execFileSync(process.execPath, [
+        tool,
+        "prepare",
+        "--campaign=SIGN-R43B-001",
+        "--actor=sm-a",
+        "--target=V1.5",
+        "--roles=all",
+        "--coverage=BASELINE-V1.5",
+        "--due=2099-07-04 18:00",
+      ], { cwd: target, encoding: "utf8", stdio: "pipe" }),
+      (error) => {
+        const stderr = String(error.stderr || "");
+        return error.status === 2 && !/本命令只能由角色/.test(stderr);
+      },
+    );
+
+    // 旧硬编码 sm 现在应被明确拒绝（期望角色是 v2 中的 sm-a）。
+    assert.throws(
+      () => execFileSync(process.execPath, [
+        tool,
+        "prepare",
+        "--campaign=SIGN-R43B-002",
+        "--actor=sm",
+        "--target=V1.5",
+        "--roles=all",
+        "--coverage=BASELINE-V1.5",
+        "--due=2099-07-04 18:00",
+      ], { cwd: target, encoding: "utf8", stdio: "pipe" }),
+      (error) => {
+        const stderr = String(error.stderr || "");
+        return error.status === 2 && /本命令只能由角色 sm-a 执行/.test(stderr);
+      },
+    );
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});

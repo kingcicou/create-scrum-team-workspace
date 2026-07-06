@@ -8,6 +8,10 @@
 
 ### Added
 
+- **R4.3b Signoff 的 SM 解析去硬编码**：`tools/signoff.mjs` 在加载上下文时统一通过
+  `loadTeamModel` 读取团队模型，并以 `scrum.scrumMaster` 作为 SM 身份与门禁来源。
+  因而 v2 `member-hat-v1` 配置下可使用非 `sm` 的成员 ID 作为 SM；legacy 配置仍投影为
+  `sm`，行为保持兼容。新增回归测试覆盖该路径（29/29）。
 - **R4.3 团队视图与校验命令（只读）**：`tools/team.mjs list` 打印当前团队模型（成员
   及其 `responsibilities`、scrum 的 PO/SM/Developers、帽子 assignment）；`team.mjs
   validate` 运行 `validateTeamModel` 输出 WARN/ERROR（有 error 时退出码 2）。两者纯读、

@@ -5,7 +5,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { loadTeamModel, memberResponsibilities } from "./lib/team-model.mjs";
+import { loadTeamModel, memberResponsibilities, activeMemberIds } from "./lib/team-model.mjs";
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const TOOL_VERSION = "{{TOOL_VERSION}}";
@@ -155,31 +155,23 @@ function loadContext(options) {
   const configPath = path.join(PROJECT_ROOT, "00_项目导航", "roles.config.json");
   if (!fs.existsSync(configPath)) fail(`缺少角色事实源：${configPath}`);
   const config = readJson(configPath);
+  // R4.3b：统一从团队模型取身份。旧七角色配置投影为等价 member-hat 视图
+  // （scrum.scrumMaster==="sm"，roles 逐字段一致），行为与旧路径不变；
+  // v2 配置则按 members + scrum 解析，SM 不再硬编码。
+  const model = loadTeamModel(config);
   const roles = {};
-  for (const [id, name] of Object.entries(config.roles || {})) {
-    roles[id] = { id, name, email: config.emails?.[id] || "", status: "active" };
+  for (const m of model.members) {
+    roles[m.id] = { id: m.id, name: m.name, email: m.email, status: m.status || "active" };
   }
-  for (const role of config.roleDetails || []) {
-    roles[role.id] = {
-      id: role.id,
-      name: role.name,
-      email: role.email,
-      status: role.status || "active",
-    };
+  const smId = model.scrum.scrumMaster;
+  const poId = model.scrum.productOwner;
+  if (!smId || !roles[smId]?.name || !roles[smId]?.email) {
+    fail("roles.config.json 缺少 SM（scrum.scrumMaster）姓名或邮箱。");
   }
-  if (!roles.sm?.name || !roles.sm?.email) fail("roles.config.json 缺少 SM 姓名或邮箱。");
 
-  // RC3：只有 status=active 的角色需要签核（core 启动团队）；planned/optional 待激活。
+  // RC3：只有 status=active 的成员需要签核（core 启动团队）；planned/optional 待激活。
   // 旧配置无 status 字段 → 全部视为 active（兼容）。
-  const details = config.roleDetails || [];
-  const hasStatus = details.some((role) => "status" in role);
-  const activeRoleIds = new Set(
-    hasStatus
-      ? details
-        .filter((role) => String(role.status || "active").toLowerCase() === "active")
-        .map((role) => role.id)
-      : Object.keys(roles),
-  );
+  const activeRoleIds = new Set(activeMemberIds(model));
 
   const defaultRepo = config.gitRoot === "repo"
     ? path.join(PROJECT_ROOT, "10_代码仓库", config.repoName)
@@ -192,7 +184,7 @@ function loadContext(options) {
   }
   const store = path.join(repo, ".team", "signoffs");
   const lockTimeoutMs = Number(options["lock-timeout"] || 60_000);
-  return { config, roles, activeRoleIds, repo, store, lockTimeoutMs };
+  return { config, model, roles, smId, poId, activeRoleIds, repo, store, lockTimeoutMs };
 }
 
 function roleIdentity(context, roleId) {
@@ -204,7 +196,7 @@ function roleIdentity(context, roleId) {
 
 function requireActor(options, expectedRole) {
   const actor = normalizeRole(options.actor);
-  if (actor !== expectedRole) {
+  if (actor !== normalizeRole(expectedRole)) {
     fail(`本命令只能由角色 ${expectedRole} 执行，请显式传入 --actor=${expectedRole}。`);
   }
 }
@@ -462,7 +454,7 @@ function renderNotice(context, campaign, digest) {
   lines.push(`验收：SM 运行 node tools/signoff.mjs status --campaign=${campaign.campaignId}`);
   lines.push(
     `关闭：仅 SM 运行 node tools/signoff.mjs close --campaign=${campaign.campaignId}`
-    + " --actor=sm；项目全局仍有缺口时工具拒绝关闭。",
+    + ` --actor=${context.smId}；项目全局仍有缺口时工具拒绝关闭。`,
   );
   return lines;
 }
@@ -566,7 +558,7 @@ function verifyCampaign(context, campaignId, print = true) {
 
 function evaluate(context, campaignId, print = true) {
   const { file: campaignFile, data: campaign } = loadCampaign(context, campaignId);
-  const campaignEvidence = introduction(context, campaignFile, context.roles.sm);
+  const campaignEvidence = introduction(context, campaignFile, context.roles[context.smId]);
   const events = eventFiles(context, campaignId).map((file) => {
     const data = readJson(file);
     const role = context.roles[data.role];
@@ -598,7 +590,7 @@ function evaluate(context, campaignId, print = true) {
   if (fs.existsSync(closureFile)) {
     closure = {
       data: readJson(closureFile),
-      evidence: introduction(context, closureFile, context.roles.sm),
+      evidence: introduction(context, closureFile, context.roles[context.smId]),
     };
   }
   const ready = campaignEvidence.ok
@@ -623,8 +615,8 @@ function evaluate(context, campaignId, print = true) {
 }
 
 function prepare(context, options) {
-  requireActor(options, "sm");
-  const sm = roleIdentity(context, "sm");
+  requireActor(options, context.smId);
+  const sm = roleIdentity(context, context.smId);
   return withMutationLock(context, () => {
     ensureCleanAuditSource(context, "prepare");
     const timezone = String(options.timezone || "Asia/Shanghai");
@@ -708,7 +700,7 @@ function prepare(context, options) {
       timezone,
       identityMode: "command-scoped",
       createdAt: localDate(),
-      createdByRole: "sm",
+      createdByRole: context.smId,
       assignments,
       participants,
     };
@@ -728,7 +720,7 @@ function prepare(context, options) {
 }
 
 function bootstrap(context, options) {
-  requireActor(options, "sm");
+  requireActor(options, context.smId);
   const campaignsDir = path.join(context.store, "campaigns");
   const existing = fs.existsSync(campaignsDir)
     ? fs.readdirSync(campaignsDir).filter((name) => name.endsWith(".json"))
@@ -755,7 +747,7 @@ function bootstrap(context, options) {
     summary: options.summary || "确认本人角色卡、责任表、周期任务清单及签核操作规则。",
     read: options.read || "本人角色卡;治理责任表;周期任务清单;签核编排协议与本人命令",
   });
-  publish(context, { ...options, campaign: campaignId, actor: "sm" });
+  publish(context, { ...options, campaign: campaignId, actor: context.smId });
   console.log(`[OK] 首签已发起：${campaignId}。创建者推送后，SM 仅跟踪 status 与 close。`);
 }
 
@@ -780,7 +772,7 @@ function sign(context, options) {
     }
     const assignment = campaign.assignments?.[memberId];
     if (!assignment) fail(`Campaign ${campaignId} 未分配成员/角色 ${memberId}。`);
-    const campaignEvidence = introduction(context, campaignPath(context, campaignId), context.roles.sm);
+    const campaignEvidence = introduction(context, campaignPath(context, campaignId), context.roles[context.smId]);
     if (!campaignEvidence.ok) fail(`Campaign 尚未由 SM 有效提交：${campaignEvidence.detail}`);
     const noticeFile = noticePath(context, campaignId);
     if (!fs.existsSync(noticeFile)) fail(`Campaign 尚未发布 Notice：${campaignId}`);
@@ -790,7 +782,7 @@ function sign(context, options) {
     if (notice.digest !== digest || suppliedDigest !== digest) {
       fail("Notice 摘要缺失或不匹配；请从 SM 发布的原始 Notice 运行本人完整命令。");
     }
-    const noticeEvidence = introduction(context, noticeFile, context.roles.sm);
+    const noticeEvidence = introduction(context, noticeFile, context.roles[context.smId]);
     if (!noticeEvidence.ok) fail(`Notice 未由 SM 有效发布：${noticeEvidence.detail}`);
     if (JSON.stringify(notice.content) !== JSON.stringify(renderNotice(context, campaign, digest))) {
       fail("Notice 内容与 Campaign 不一致，拒绝签核。");
@@ -852,8 +844,8 @@ function sign(context, options) {
 }
 
 function close(context, options) {
-  requireActor(options, "sm");
-  const sm = roleIdentity(context, "sm");
+  requireActor(options, context.smId);
+  const sm = roleIdentity(context, context.smId);
   withMutationLock(context, () => {
     ensureCleanAuditSource(context, "close");
     const campaignId = String(options.campaign || latestCampaignId(context));
@@ -872,7 +864,7 @@ function close(context, options) {
       schemaVersion: 2,
       campaignId,
       closedAt: localDate(),
-      closedByRole: "sm",
+      closedByRole: context.smId,
       globalAuditGeneratedAt: globalAudit.generatedAt,
       result: "closed",
       eventIds: status.events.filter((event) => event.evidence.ok).map((event) => event.data.eventId).sort(),
@@ -885,8 +877,8 @@ function close(context, options) {
 }
 
 function publish(context, options) {
-  requireActor(options, "sm");
-  const sm = roleIdentity(context, "sm");
+  requireActor(options, context.smId);
+  const sm = roleIdentity(context, context.smId);
   withMutationLock(context, () => {
   const campaignId = String(options.campaign || latestCampaignId(context));
   const verification = verifyCampaign(context, campaignId, false);
@@ -924,7 +916,7 @@ function publish(context, options) {
     campaignId,
     digest,
     publishedAt: localDate(),
-    publishedByRole: "sm",
+    publishedByRole: context.smId,
     auditSnapshot,
     content,
   });
