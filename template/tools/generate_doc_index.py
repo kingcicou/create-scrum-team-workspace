@@ -29,7 +29,16 @@ import datetime
 import json
 import re
 import subprocess
+import sys
 from pathlib import Path
+
+# Windows CI（GitHub Actions）默认 stdout 编码为 cp1252，无法编码中文，会在
+# print() 中文时抛 UnicodeEncodeError 并使进程非零退出。强制 UTF-8 输出。
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except (AttributeError, ValueError):
+    pass
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT = SCRIPT_DIR.parent  # 项目根目录

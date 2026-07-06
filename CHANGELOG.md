@@ -8,6 +8,11 @@
 
 ### Fixed
 
+- 修复 Windows CI 的 Python stdout 编码崩溃：`generate_doc_index.py` 启动时
+  `sys.stdout/stderr.reconfigure(encoding="utf-8")`。GitHub Actions Windows 运行器
+  默认 stdout 为 cp1252，`print()` 中文抛 `UnicodeEncodeError` 使进程非零退出，
+  导致依赖生成器的 6 个签核测试失败。在脚本内自愈，不依赖 `PYTHONUTF8`/`PYTHONIOENCODING`
+  等调用方环境变量。
 - 测试去除日期耦合：`v0.10.4 publishes immutable notices` 用当日本地日期动态拼接
   Campaign（`SIGN-<today>-001`）与 Event（`EVT-PO-<today>-001`）ID，不再硬编码
   `20260704`；此前非 2026-07-04 当日运行会因 ID 不匹配导致 CI 失败。
