@@ -8,6 +8,10 @@
 
 ### Added
 
+- **R4.2a Campaign participants 快照**：`prepare`/`bootstrap` 创建 Campaign 时用团队
+  模型固化 `participants`（每成员的姓名/邮箱/`responsibilities`/`coverage` 快照）。
+  历史 Event 将按此快照验证，不因成员后来改名/换邮箱而失效；不动态读取当前 assignments。
+  加法字段，不进 Notice 摘要，现有 role 签核流与摘要保持不变（26/26）。
 - **R4.1 团队模型加载层（member-hat-v1）**：`tools/lib/team-model.mjs` 把两种
   `roles.config` 归一为标准视图 `members + scrum + hats + assignments`。旧七角色
   配置**投影**为等价 member-hat 视图（PO/SM→scrum 责任，编码角色→帽子 assignment；

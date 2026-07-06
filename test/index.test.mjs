@@ -1652,6 +1652,13 @@ test("RC3 core team stage bootstraps only the active core roles", () => {
     const campaign = JSON.parse(fs.readFileSync(path.join(campaignDir, fs.readdirSync(campaignDir)[0]), "utf8"));
     assert.deepEqual(Object.keys(campaign.assignments).sort(), ["po", "sm", "tl"]);
 
+    // R4.2：Campaign 固化 participants 快照（姓名/邮箱/责任/覆盖），历史按此验证不因改名失效
+    assert.deepEqual(Object.keys(campaign.participants).sort(), ["po", "sm", "tl"]);
+    assert.equal(campaign.participants.tl.email, "tl@example.test");
+    assert.ok(campaign.participants.po.responsibilities.includes("scrum:productOwner"));
+    assert.ok(campaign.participants.tl.responsibilities.includes("hat:tl"));
+    assert.ok(campaign.participants.tl.responsibilities.includes("scrum:developer"));
+
     const cfg = JSON.parse(fs.readFileSync(path.join(target, "00_项目导航", "roles.config.json"), "utf8"));
     assert.equal(cfg.teamStage, "core");
     const statusOf = (id) => cfg.roleDetails.find((role) => role.id === id).status;

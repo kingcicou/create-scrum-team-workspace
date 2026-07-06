@@ -5,6 +5,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { loadTeamModel, memberResponsibilities } from "./lib/team-model.mjs";
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const TOOL_VERSION = "{{TOOL_VERSION}}";
@@ -667,6 +668,19 @@ function prepare(context, options) {
     const campaignId = String(options.campaign || nextCampaignId(context)).trim();
     const file = campaignPath(context, campaignId);
     if (fs.existsSync(file)) fail(`Campaign 已存在：${campaignId}`);
+    // R4.2：固化成员快照（姓名/邮箱/责任/覆盖）。历史 Event 按此快照验证，
+    // 不因成员后来改名/换邮箱而失效；不动态读取当前 assignments。
+    const teamModel = loadTeamModel(context.config);
+    const participants = {};
+    for (const [memberId, assignment] of Object.entries(assignments)) {
+      const member = context.roles[memberId] || {};
+      participants[memberId] = {
+        name: member.name || memberId,
+        email: member.email || "",
+        responsibilities: memberResponsibilities(teamModel, memberId),
+        coverage: assignment.coverage || [],
+      };
+    }
     const campaign = {
       schemaVersion: 4,
       toolVersion: TOOL_VERSION,
@@ -696,6 +710,7 @@ function prepare(context, options) {
       createdAt: localDate(),
       createdByRole: "sm",
       assignments,
+      participants,
     };
     const missing = missingCoverage(campaign, audit);
     if (missing.length) {
