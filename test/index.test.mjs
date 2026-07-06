@@ -1600,16 +1600,28 @@ test("RC3 default create initializes doc-git only and defers the code repo", () 
     assert.equal(fs.existsSync(card), true);
     assert.match(fs.readFileSync(card, "utf8"), /状态.*pending/);
 
-    // 延后建仓：setup-code-repo create → 独立 Git + 文档仓忽略隔离
+    // 延后建仓：propose → approve(PO+TL) → apply（审批门禁，与人员签核分离）
     const tool = path.join(target, "tools", "setup-code-repo.mjs");
-    execFileSync(process.execPath, [tool, "--strategy=create", "--repo=my-app", "--sprint=0"], {
-      cwd: target,
-      encoding: "utf8",
-    });
+    const run = (args) => execFileSync(process.execPath, [tool, ...args], { cwd: target, encoding: "utf8" });
+    run(["propose", "--strategy=create", "--repo=my-app"]);
+    // 未审批时 apply 被门禁拒绝
+    assert.throws(
+      () => execFileSync(process.execPath, [tool, "apply", "--decision=REPO-001", "--yes"], { cwd: target, stdio: "pipe" }),
+      (error) => error.status === 2,
+    );
+    run(["approve", "--decision=REPO-001", "--actor=po"]);
+    run(["approve", "--decision=REPO-001", "--actor=tl"]);
+    assert.match(run(["check", "--decision=REPO-001"]), /READY/);
+    run(["apply", "--decision=REPO-001", "--yes"]);
     const codeRepo = path.join(target, "10_代码仓库", "my-app");
     assert.equal(git(codeRepo, ["rev-parse", "--is-inside-work-tree"]).trim(), "true");
     assert.match(fs.readFileSync(path.join(target, ".gitignore"), "utf8"), /10_代码仓库\/my-app\//);
     assert.equal(git(target, ["status", "--short"]).trim(), "");
+    // 幂等：再次 apply 被拒
+    assert.throws(
+      () => execFileSync(process.execPath, [tool, "apply", "--decision=REPO-001", "--yes"], { cwd: target, stdio: "pipe" }),
+      (error) => error.status === 2,
+    );
   } finally {
     fs.rmSync(sandbox, { recursive: true, force: true });
   }

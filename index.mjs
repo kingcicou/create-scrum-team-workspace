@@ -1420,8 +1420,9 @@ async function main() {
   console.log("3. 团队学习各角色“必读最小集”与知识库。");
   console.log("4. 全员规范首签：SM 运行 signoff bootstrap → 成员 sign → SM close。");
   console.log("5. 首签关闭后，SM 从首页复制“启动通知”发群，分配 Sprint 0 工作（≠签核通知）。");
-  console.log("6. Sprint 0 弄清目标与技术后，再按需建代码仓（见 Sprint-0-启动/仓库决策卡.md）：");
-  console.log("   node tools/setup-code-repo.mjs --strategy=create --repo=<name> --sprint=0");
+  console.log("6. Sprint 0 弄清目标与技术后，经 PO/TL 审批再建代码仓（见 Sprint-0-启动/仓库决策卡.md）：");
+  console.log("   node tools/setup-code-repo.mjs propose --strategy=create --repo=<name>");
+  console.log("   → approve --actor=po → approve --actor=tl → check → apply");
   if (signoffResult.state === "published") {
     console.log("6. 首签 Notice 已生成：创建者推送后，SM 转发原文并跟踪 status；成员运行本人命令。");
   } else if (signoffResult.state === "guide") {

@@ -6,8 +6,14 @@
 
 ## [Unreleased]
 
+## [1.0.0-rc.4] - 2026-07-06
+
 ### Added
 
+- **代码仓创建改为 `propose → approve → check → apply` 结构化审批**（`setup-code-repo.mjs`）：
+  决策工件 `.team/repo-decisions/REPO-NNN.json` 带 Decision ID + PO/TL 审批；apply 门禁
+  （状态=approved、双审批、文档仓干净、目标空、已 gitignore、无凭据、幂等）+ 交互确认
+  （`--yes` 不绕审批）。人员签核与仓库审批分属不同工件。
 - **分阶段团队模型（核心启动团队 ≠ 交付团队）**：`roles.config.json` 每角色新增
   `status`（active/optional/planned）+ 顶层 `teamStage`。`--team-stage=core` 只激活
   PO/SM/TL（srfe 可选、其余 planned）；默认 `full`（全员 active，向后兼容）。
@@ -23,8 +29,7 @@
 
 ### Notes
 
-- 待办（下一增量）：代码仓创建改为 `propose → approve → apply` 结构化审批门禁
-  （与人员签核分离的独立工件）；`team.mjs add` 增量入队自动化留 RC4。
+- 待办 RC4：`team.mjs add` 增量入队自动化 + 成员/帽子数据模型（成员↔多帽子）。
 
 ## [1.0.0-rc.3] - 2026-07-06
 
