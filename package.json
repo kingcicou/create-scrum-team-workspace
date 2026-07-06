@@ -9,7 +9,7 @@
     "create-scrum-team-workspace": "index.mjs"
   },
   "scripts": {
-    "test": "cross-env PYTHONUTF8=1 node --test test/index.test.mjs"
+    "test": "node --test test/index.test.mjs"
   },
   "files": [
     "index.mjs",
@@ -43,8 +43,5 @@
   "homepage": "https://github.com/kingcicou/create-scrum-team-workspace#readme",
   "bugs": {
     "url": "https://github.com/kingcicou/create-scrum-team-workspace/issues"
-  },
-  "devDependencies": {
-    "cross-env": "^10.1.0"
   }
 }
