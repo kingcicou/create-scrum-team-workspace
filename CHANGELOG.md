@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [0.10.7] - 2026-07-06
+
 ### Fixed
 
 - 修复 Windows CI 的 Python stdout 编码崩溃：`generate_doc_index.py` 启动时
