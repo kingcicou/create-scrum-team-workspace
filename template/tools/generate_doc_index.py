@@ -754,8 +754,13 @@ def _load_file_signoffs():
             closure_evidence = ""
             state = "open"
             if closure.exists():
-                sm_name = ROLE_TO_PERSON.get(SM_ROLE_ID, "")
-                sm_email = ROLE_EMAILS.get(SM_ROLE_ID, "")
+                try:
+                    closure_data = json.loads(closure.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    closure_data = {}
+                closed_identity = closure_data.get("closedByIdentity", {})
+                sm_name = closed_identity.get("name") or ROLE_TO_PERSON.get(SM_ROLE_ID, "")
+                sm_email = closed_identity.get("email") or ROLE_EMAILS.get(SM_ROLE_ID, "")
                 closure_evidence = _git_file_evidence(
                     closure.relative_to(SIGNOFF_REPO), sm_name, sm_email
                 )

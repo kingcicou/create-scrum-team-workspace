@@ -6,6 +6,37 @@
 
 ## [Unreleased]
 
+## [1.0.0-rc.6] - 2026-07-06
+
+### Changed
+
+- **项目创建与代码开工解耦**：默认 `--git-root=workspace` 只生成可追溯的文档治理仓，
+  不再预建代码骨架；`reuse` 同样保留文档 Git。技术方案明确后，PO/TL 通过
+  `setup-code-repo.mjs propose → approve → check → apply` 创建或接入代码仓。
+- **团队生命周期闭环**：`team.mjs` 扩展
+  `add/assign/update/set-status/unassign/sync`。有效入队、激活和帽子变化自动登记
+  Change ID、提升手册基线、同步任务/联系人视图，并以当前 SM 的命令级身份提交；
+  `prepare --from-audit` 因而能产生真实 onboarding/role-change Campaign。
+- **成员/帽子模型贯通仓库审批**：仓库工具统一读取 `member-hat-v1`，从 Scrum 责任和
+  活跃帽子解析 PO、TL 与执行人；legacy 配置继续通过投影视图兼容。
+- **历史身份采用工件快照**：Campaign、Notice、Closure 固化创建者/发布者/关闭者身份；
+  Event 按 Campaign participant 快照验证。成员后续改名或换邮箱不再破坏历史 Campaign，
+  Node 与 Python 审计结果保持一致。
+
+### Fixed
+
+- `create` 仓库目标只要非空即阻断，不能再把预存文件吸收入初始化提交。
+- 建仓改为同卷暂存目录完成 Git 初始化后原子改名；代码仓、`.gitignore` 和决策状态在
+  文档提交失败时回滚，Git 分支/远端/提交失败不再被静默吞掉。
+- 团队模型校验补齐成员 ID/状态/邮箱、重复邮箱、assignment kind/status/重复项、
+  Scrum developers 悬空/重复及 active 责任引用。
+- 测试使用 `process.env.PYTHON`，不再硬编码 `python`。
+
+### Tests
+
+- 新增成员变更→Change→Python 审计、v2 团队仓库审批、任意非空目标拒绝、历史身份
+  变化后 Campaign/Closure 仍有效等跨模块回归；全量测试增至 34 项。
+
 ## [1.0.0-rc.5] - 2026-07-06
 
 ### Added

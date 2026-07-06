@@ -24,6 +24,9 @@ export const HAT_LABELS = {
 };
 
 const LEGACY_DEVELOPER_ROLES = ["tl", "midbe", "srfe", "midfe", "fs"];
+const MEMBER_STATUSES = new Set(["active", "optional", "planned", "inactive"]);
+const ASSIGNMENT_STATUSES = new Set(["active", "optional", "planned", "inactive"]);
+const ASSIGNMENT_KINDS = new Set(["primary", "backup"]);
 
 function isMemberHatV2(config) {
   return config && config.schemaVersion === 2 && config.model === "member-hat-v1";
@@ -115,7 +118,7 @@ export function memberResponsibilities(model, memberId) {
   if (model.scrum.scrumMaster === memberId) out.push("scrum:scrumMaster");
   if (model.scrum.developers.includes(memberId)) out.push("scrum:developer");
   for (const a of model.assignments) {
-    if (a.memberId === memberId && a.status !== "planned") out.push(`hat:${a.hatId}`);
+    if (a.memberId === memberId && a.status === "active") out.push(`hat:${a.hatId}`);
   }
   return out;
 }
@@ -133,10 +136,17 @@ export function validateTeamModel(model) {
   const emailToMember = new Map();
   for (const m of model.members) {
     if (!m.id) errors.push("存在缺少 id 的成员");
+    else if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(m.id)) {
+      errors.push(`成员 id 非法：${m.id}`);
+    }
     if (seenId.has(m.id)) errors.push(`成员 id 重复：${m.id}`);
     seenId.add(m.id);
+    if (!String(m.name || "").trim()) errors.push(`成员 ${m.id || "?"} 缺少姓名`);
+    if (!MEMBER_STATUSES.has(m.status)) errors.push(`成员 ${m.id || "?"} 状态非法：${m.status}`);
     const email = String(m.email || "").toLowerCase();
-    if (email) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errors.push(`成员 ${m.id || "?"} 邮箱非法：${m.email || "空"}`);
+    } else {
       if (emailToMember.has(email)) {
         errors.push(`同一邮箱属于两个成员：${email}（${emailToMember.get(email)} 与 ${m.id}）`);
       } else {
@@ -144,13 +154,40 @@ export function validateTeamModel(model) {
       }
     }
   }
+  const assignmentKeys = new Set();
   for (const a of model.assignments) {
     if (!seenId.has(a.memberId)) errors.push(`assignment 指向不存在的成员：${a.memberId}`);
     if (!model.hats[a.hatId]) errors.push(`assignment 指向未定义的帽子：${a.hatId}`);
+    if (!ASSIGNMENT_STATUSES.has(a.status)) {
+      errors.push(`assignment ${a.memberId}->${a.hatId} 状态非法：${a.status}`);
+    }
+    if (!ASSIGNMENT_KINDS.has(a.kind)) {
+      errors.push(`assignment ${a.memberId}->${a.hatId} kind 非法：${a.kind}`);
+    }
+    const key = `${a.memberId}\0${a.hatId}`;
+    if (assignmentKeys.has(key)) errors.push(`assignment 重复：${a.memberId}->${a.hatId}`);
+    assignmentKeys.add(key);
+    const member = model.members.find((m) => m.id === a.memberId);
+    if (a.status === "active" && member && member.status !== "active") {
+      errors.push(`active assignment 指向非 active 成员：${a.memberId}->${a.hatId}`);
+    }
   }
   for (const key of ["productOwner", "scrumMaster"]) {
     const id = model.scrum[key];
     if (id && !seenId.has(id)) errors.push(`scrum.${key} 指向不存在的成员：${id}`);
+  }
+  for (const id of model.scrum.developers) {
+    if (!seenId.has(id)) errors.push(`scrum.developers 指向不存在的成员：${id}`);
+  }
+  if (new Set(model.scrum.developers).size !== model.scrum.developers.length) {
+    errors.push("scrum.developers 存在重复成员");
+  }
+  for (const key of ["productOwner", "scrumMaster"]) {
+    const id = model.scrum[key];
+    const member = model.members.find((item) => item.id === id);
+    if (member && member.status !== "active") {
+      errors.push(`scrum.${key} 必须指向 active 成员：${id}`);
+    }
   }
   if (model.scrum.productOwner && model.scrum.productOwner === model.scrum.scrumMaster) {
     warnings.push(`PO 与 SM 指向同一成员（${model.scrum.productOwner}）：职责冲突，建议分离`);

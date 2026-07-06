@@ -11,19 +11,19 @@
 ### 方式一：Bash 一键执行（macOS / Linux / WSL / Git Bash）
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.4/create.sh) my-project
+bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.6/create.sh) my-project
 ```
 
 可叠加任意 CLI 选项：
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.4/create.sh) my-project --type=new --preset=tech
+bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.6/create.sh) my-project --type=new --preset=tech
 ```
 
 ### 方式二：PowerShell 一键执行（Windows）
 
 ```powershell
-irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.4/create.ps1 | iex
+irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.6/create.ps1 | iex
 ```
 
 执行后会进入交互式创建。也可提前设环境变量传项目名与额外参数：
@@ -31,20 +31,20 @@ irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0
 ```powershell
 $env:PROJECT_NAME="my-project"
 $env:SCRUM_TEMPLATE_ARGS="--type=new --preset=tech"
-irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.4/create.ps1 | iex
+irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.6/create.ps1 | iex
 ```
 
 ### 方式三：npx（全平台，需 Node.js >= 24）
 
 ```bash
 # 直接从 GitHub 执行（推荐，与参考仓库一致）
-npx -y github:kingcicou/create-scrum-team-workspace#v1.0.0-rc.5 my-project
+npx -y github:kingcicou/create-scrum-team-workspace#v1.0.0-rc.6 my-project
 
 # 仅预览不写盘
-npx -y github:kingcicou/create-scrum-team-workspace#v1.0.0-rc.5 my-project --dry-run
+npx -y github:kingcicou/create-scrum-team-workspace#v1.0.0-rc.6 my-project --dry-run
 
 # 交互式
-npx -y github:kingcicou/create-scrum-team-workspace#v1.0.0-rc.5 --interactive
+npx -y github:kingcicou/create-scrum-team-workspace#v1.0.0-rc.6 --interactive
 ```
 
 > 未发布到 npm registry，请使用 `github:` 前缀。
@@ -66,7 +66,7 @@ node index.mjs my-project --type=new --preset=tech
 - 支持单个角色改名，例如 `--role.midfe=Aurora`。
 - 交互式先列出全部角色，可按槽位调整名称与邮箱，最终统一确认。
 - 自动生成角色表、角色 Soul 卡、能力矩阵、备份机制、Sprint 0 分工。
-- `create/import/rewrite` 默认初始化目标代码仓，并统一创建五个编码角色 worktree；`reuse` 不复制现仓。
+- 默认只初始化文档治理仓；代码仓在 Sprint 0 明确技术方案后，经 PO/TL 审批再创建或接入。
 - 使用 worktree 级 Git 配置隔离五个角色的提交身份。
 - 支持可选角色就绪测试提交、origin 配置和显式远端推送。
 - 自动生成产品、Backlog、Sprint、工程设计、质量、发布、度量、会议决策目录。
@@ -91,14 +91,15 @@ node index.mjs my-project --type=new --preset=tech
   配置，同一工作目录的签核写入由互斥锁串行化，事件创建后不可修改。
 - **显式文档治理**：普通任务只更新 Sprint 任务表；长期正式产物标记
   `governance: managed`，历史/入口/骨架不追溯清债；高冲突时才升级 PR/CODEOWNERS。
-- **小团队说明**：2-4 人帽子合并目前是实验性手工方案，建议生成时使用
-  `--no-worktrees`，由 FS 按实际成员建工作区；CLI 暂未自动支持一人多帽。
+- **成员/帽子模型**：同一成员可承担多个工程帽子；签核按成员一次覆盖其当前责任，
+  `team.mjs` 负责入队、换帽、状态和派生视图同步。
 - **Sprint关闭经验（v0.5.0）**：提炼QFD_Ark外部评审六条教训，分离时间盒、Goal、遗留处置和下一轮准入，并生成轻量关闭检查表；详见`知识库/Scrum/14_Sprint关闭与证据治理规范.md`。
 - **Sprint关闭收口（v0.9.2）**：区分计划周期、工作完成和正式关闭；关闭时
   切换首页/日历/角色入口，以单一事实源归档，并采用平台无关的 CI 最小证据。
 - **分级任务执行（v0.7.0）**：高阶角色负责目标、模块拆分、复杂度和 Review；普通执行任务默认只维护状态与证据。
 - 项目首页提供 30 分钟上手路径；成员按当前 Task 和角色查阅知识，不要求通读知识库。
-- 按仓库策略生成代码骨架、仓库清单和 `TeamWork/` 协同工作区规范。
+- 按仓库策略生成仓库决策卡与清单；显式 `--git-root=repo` 才在创建时生成代码骨架和
+  `TeamWork/`，默认由 `setup-code-repo.mjs` 延后执行。
 - 代码仓库不维护重复 `01-docs` 文档中心；项目工作区文档是主事实源，代码仓库保留可执行资产和链接。
 
 ## 用法详解
@@ -231,7 +232,7 @@ node tools/signoff.mjs bootstrap --actor=sm --due=+72h
 推送；SM 原样转发 Notice、运行 `status/close`；成员拉取后运行 Notice 中本人
 `sign` 命令。普通成员只需 Node.js 与 Git，Python 仅用于创建者/SM 的实时审计。
 
-`repo/none/reuse`、占位邮箱或缺 Python 时自动降级为 `guide`，不会假装首签已发起。
+`repo/none`、占位邮箱或缺 Python 时自动降级为 `guide`，不会假装首签已发起。
 先将项目规范纳入可追溯 Git 事实源，再执行上述命令。可显式使用
 `--initial-signoff=guide|off`。
 
@@ -254,15 +255,46 @@ node index.mjs --list-presets
 
 | 参数 | 适用情形 | 生成行为 |
 | --- | --- | --- |
-| `--repo-strategy=reuse` | 现有仓可继续迭代 | 不复制代码、不初始化新仓，只登记来源 |
-| `--repo-strategy=import` | 散落/未规范代码需整合 | 生成目标仓，指导冻结、去敏和导入 |
-| `--repo-strategy=rewrite` | Rust/Svelte 等新栈并行替换 | 生成候选新仓，保留旧仓维护与回退 |
-| `--repo-strategy=create` | 完全从零开发 | 生成新主仓与协作工作区 |
+| `--repo-strategy=reuse` | 现有仓可继续迭代 | 登记来源，Sprint 0 审核后接入，不复制代码 |
+| `--repo-strategy=import` | 散落/未规范代码需整合 | 登记导入决策，审核冻结、去敏和目标仓 |
+| `--repo-strategy=rewrite` | Rust/Svelte 等新栈并行替换 | 登记候选仓、现行仓与切换/回退门禁 |
+| `--repo-strategy=create` | 完全从零开发 | 登记新建意图，审核后创建独立代码仓 |
 
 项目类型是背景，仓库策略是 Sprint 决策。生成后的
 `10_代码仓库/00_仓库清单.md` 是仓库角色和切换状态的事实源。
 未显式指定时采用建议值：`new -> create`、`legacy -> rewrite`、
 `product -> reuse`、`prototype -> import`；团队可按实际情况覆盖。
+
+仓库策略只声明意图，不等于立即建仓。默认在 Sprint 0 由 PO/TL 审核后执行：
+
+```bash
+node tools/setup-code-repo.mjs propose --strategy=create --repo=my-app
+node tools/setup-code-repo.mjs approve --decision=REPO-001 --actor=po
+node tools/setup-code-repo.mjs approve --decision=REPO-001 --actor=tl
+node tools/setup-code-repo.mjs check --decision=REPO-001
+node tools/setup-code-repo.mjs apply --decision=REPO-001
+```
+
+`apply` 会再次检查文档仓清洁、双审批、目标目录为空及远端安全；实际执行人从当前
+成员/帽子模型解析，不固定为名为 `fs` 的成员。
+
+## 团队生命周期
+
+创建时可先用 `--team-stage=core` 激活 PO、SM、TL 等 Sprint 0 核心专家。后续人员
+入队或责任变化必须通过团队工具，不直接手改多个视图：
+
+```bash
+node tools/team.mjs list
+node tools/team.mjs add --member=alice --name=Alice --email=alice@example.com --status=active --developer
+node tools/team.mjs assign --member=alice --hat=backend --status=active
+node tools/team.mjs update --member=alice --email=alice.new@example.com
+node tools/team.mjs set-status --member=alice --status=inactive
+node tools/team.mjs unassign --member=alice --hat=backend
+```
+
+工具会校验团队模型、同步任务与联系人视图，并由 SM 的命令级 Git 身份提交事实变化。
+入队、激活和有效帽子变化会登记 Change ID；随后 SM 按输出运行
+`signoff.mjs prepare --from-audit`，新成员会补签基础基线及其受影响变化。
 
 ## 角色套装
 
@@ -292,8 +324,8 @@ node index.mjs --list-presets
 
 | 参数 | 含义 |
 | --- | --- |
-| `--git-root=repo`（新建目标仓时默认） | 初始化独立目标代码仓，并创建 5 个编码角色 worktree |
-| `--git-root=workspace` | 把整个项目工作区初始化为一个 Git 仓库；不自动创建角色 worktree |
+| `--git-root=workspace`（默认） | 初始化文档治理仓；不创建代码仓或角色 worktree |
+| `--git-root=repo` | 技术方案已明确时立即初始化独立代码仓，并可创建编码角色 worktree |
 | `--git-root=none` / `--no-git` | 不自动初始化 Git |
 
 相关开关：

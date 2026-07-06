@@ -48,6 +48,7 @@ test("creates isolated coding-role worktrees and identities", () => {
       target,
       "--preset=studio",
       "--repo=demo-app",
+      "--git-root=repo",
       "--sprint=4",
       "--role-test-commits",
     ]);
@@ -135,7 +136,7 @@ test("--no-worktrees skips role worktree creation but keeps repo init", () => {
   const target = path.join(sandbox, "project");
 
   try {
-    runCli([target, "--repo=lean-app", "--no-worktrees"]);
+    runCli([target, "--repo=lean-app", "--git-root=repo", "--no-worktrees"]);
 
     const repo = path.join(target, "10_代码仓库", "lean-app");
     assert.ok(fs.existsSync(path.join(repo, ".git")), "code repo should still be a git repo");
@@ -193,8 +194,9 @@ test("product reuse records the existing repo without creating a code copy", () 
     assert.equal(config.type, "product");
     assert.equal(config.repoStrategy, "reuse");
     assert.equal(config.sourceRepo, sourceRepo);
-    assert.equal(config.gitRoot, "none");
+    assert.equal(config.gitRoot, "workspace");
     assert.equal(config.setupWorktrees, false);
+    assert.equal(git(target, ["rev-parse", "--is-inside-work-tree"]).trim(), "true");
 
     const workspaceFile = fs
       .readdirSync(target)
@@ -232,7 +234,7 @@ test("product reuse records the existing repo without creating a code copy", () 
   }
 });
 
-test("rewrite keeps the source repo visible and creates a candidate target repo", () => {
+test("rewrite keeps the source repo visible and defers the candidate target repo", () => {
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-rewrite-"));
   const target = path.join(sandbox, "project");
   const sourceRepo = "https://example.com/acme/legacy.git";
@@ -248,11 +250,10 @@ test("rewrite keeps the source repo visible and creates a candidate target repo"
       "--no-git",
     ]);
 
-    assert.ok(
-      fs.existsSync(
-        path.join(target, "10_代码仓库", "rust-svelte-next", "apps", "backend", "README.md"),
-      ),
-      "rewrite should create the candidate target skeleton",
+    assert.equal(
+      fs.existsSync(path.join(target, "10_代码仓库", "rust-svelte-next")),
+      false,
+      "rewrite should wait for an approved Sprint 0 repository decision",
     );
 
     const inventory = fs.readFileSync(
@@ -297,6 +298,7 @@ test("--remote + --push pushes all branches to a local bare remote", () => {
       target,
       "--preset=studio",
       "--repo=pushed-app",
+      "--git-root=repo",
       "--sprint=2",
       `--remote=${remoteUrl}`,
       "--push",
@@ -343,7 +345,7 @@ test("--push refuses placeholder @example.com emails", () => {
 
     let threw = false;
     try {
-      runCli([target, "--repo=guard-app", `--remote=${remoteUrl}`, "--push"], { stdio: "pipe" });
+      runCli([target, "--repo=guard-app", "--git-root=repo", `--remote=${remoteUrl}`, "--push"], { stdio: "pipe" });
     } catch (error) {
       threw = true;
       const combined = `${error.stdout || ""}${error.stderr || ""}`;
@@ -715,8 +717,8 @@ test("v0.9.1 scopes governance debt and keeps onboarding non-blocking", () => {
     assert.ok(roleManual.includes("签核不是 Sprint 开工门禁"));
     assert.ok(roleManual.includes("governance: managed"));
     assert.ok(roleManual.includes("resign-roles: []"));
-    assert.ok(smallTeam.includes("实验性手工方案"));
-    assert.ok(smallTeam.includes("--no-worktrees"));
+    assert.ok(smallTeam.includes("members + scrum + hats + assignments"));
+    assert.ok(smallTeam.includes("team.mjs assign"));
 
     const invalidDoc = path.join(target, "04_工程设计", "INVALID_受管文档.md");
     fs.writeFileSync(
@@ -1272,7 +1274,7 @@ test("v0.10.4 publishes immutable notices before signoff", () => {
       "--repo=event-app",
       "--no-worktrees",
     ]);
-    const repo = path.join(target, "10_代码仓库", "event-app");
+    const repo = target;
     const config = JSON.parse(
       fs.readFileSync(path.join(target, "00_项目导航", "roles.config.json"), "utf8"),
     );
@@ -1441,6 +1443,12 @@ test("v0.10.4 publishes immutable notices before signoff", () => {
       "| CHG-200 | V1.6 | 2026-07-04 | PO 新增规则 | PO |\n| CHG-100 | V1.5 |",
     );
     fs.writeFileSync(manualPath, manual, "utf8");
+    git(repo, ["add", "00_项目导航/11_角色行动手册.md"]);
+    git(repo, [
+      "-c", `user.name=${config.roles.sm}`,
+      "-c", `user.email=${config.emails.sm}`,
+      "commit", "-m", "docs: register CHG-200",
+    ]);
 
     assert.throws(
       () => runSignoff(["close", "--campaign=SIGN-TEST-002", "--actor=sm"], { stdio: "pipe" }),
@@ -1527,7 +1535,7 @@ test("v0.10.5 advisory late signing, hard-mode enforcement, and audit-input drif
   const target = path.join(sandbox, "project");
   try {
     runCli([target, "--repo=event-app", "--no-worktrees"]);
-    const repo = path.join(target, "10_代码仓库", "event-app");
+    const repo = target;
     const tool = path.join(target, "tools", "signoff.mjs");
     const runSignoff = (args, options = {}) =>
       execFileSync(process.execPath, [tool, ...args], {
@@ -1600,11 +1608,10 @@ test("RC3 default create initializes doc-git only and defers the code repo", () 
     assert.equal(git(target, ["rev-parse", "--is-inside-work-tree"]).trim(), "true");
 
     const codeRoot = path.join(target, "10_代码仓库");
-    const skeleton = fs.readdirSync(codeRoot)
+    const generatedCodeDirs = fs.readdirSync(codeRoot)
       .map((name) => path.join(codeRoot, name))
-      .find((entry) => fs.statSync(entry).isDirectory());
-    assert.ok(skeleton, "应存在代码骨架目录");
-    assert.equal(fs.existsSync(path.join(skeleton, ".git")), false);
+      .filter((entry) => fs.statSync(entry).isDirectory());
+    assert.deepEqual(generatedCodeDirs, [], "Sprint 0 审批前不应创建代码骨架目录");
 
     const card = path.join(target, "03_迭代运行", "Sprint-0-启动", "仓库决策卡.md");
     assert.equal(fs.existsSync(card), true);
@@ -1712,8 +1719,8 @@ test("R4.1 member-hat v2 config passes through, warns on PO=SM", () => {
     schemaVersion: 2,
     model: "member-hat-v1",
     members: [
-      { id: "m-a", name: "Alice", email: "a@x", status: "active" },
-      { id: "m-b", name: "Bob", email: "b@x", status: "active" },
+      { id: "m-a", name: "Alice", email: "a@example.test", status: "active" },
+      { id: "m-b", name: "Bob", email: "b@example.test", status: "active" },
     ],
     scrum: { productOwner: "m-a", scrumMaster: "m-a", developers: ["m-b"] },
     hats: { tl: { label: "TL" }, backend: { label: "Backend" } },
@@ -1734,8 +1741,8 @@ test("R4.1 validation catches duplicate email and dangling references", () => {
     schemaVersion: 2,
     model: "member-hat-v1",
     members: [
-      { id: "m-a", name: "Alice", email: "same@x", status: "active" },
-      { id: "m-b", name: "Bob", email: "SAME@x", status: "active" },
+      { id: "m-a", name: "Alice", email: "same@example.test", status: "active" },
+      { id: "m-b", name: "Bob", email: "SAME@example.test", status: "active" },
     ],
     scrum: { productOwner: "m-a", scrumMaster: "m-b", developers: ["ghost"] },
     hats: {},
@@ -1891,7 +1898,8 @@ test("R4.3b team.mjs add/assign migrates to v2 and enforces validate-before-writ
       "--status=active",
       "--developer",
     ], { cwd: target, encoding: "utf8" });
-    assert.match(addOut, /已新增成员：devx/);
+    assert.match(addOut, /成员 devx 入队/);
+    assert.match(addOut, /CHG-\d+/);
     assert.match(addOut, /prepare --from-audit/);
 
     const assignOut = execFileSync(process.execPath, [
@@ -1903,8 +1911,8 @@ test("R4.3b team.mjs add/assign migrates to v2 and enforces validate-before-writ
       "--status=active",
       "--label=Backend",
     ], { cwd: target, encoding: "utf8" });
-    assert.match(assignOut, /已更新 assignment：devx -> backend/);
-    assert.match(assignOut, /role-change 批次/);
+    assert.match(assignOut, /成员 devx 新增或调整帽子 backend/);
+    assert.match(assignOut, /CHG-\d+/);
 
     const cfg = JSON.parse(fs.readFileSync(cfgFile, "utf8"));
     assert.equal(cfg.schemaVersion, 2);
@@ -1954,7 +1962,8 @@ test("R4.3b generate_doc_index.py works with v2 member-hat config", () => {
     fs.writeFileSync(cfgFile, `${JSON.stringify(v2, null, 2)}\n`, "utf8");
 
     const py = path.join(target, "tools", "generate_doc_index.py");
-    const pyOut = execFileSync("python", [py], {
+    const python = process.env.PYTHON || "python";
+    const pyOut = execFileSync(python, [py], {
       cwd: target,
       encoding: "utf8",
       env: { ...process.env, PYTHONIOENCODING: "cp1252" },
@@ -1965,6 +1974,151 @@ test("R4.3b generate_doc_index.py works with v2 member-hat config", () => {
       fs.readFileSync(path.join(target, "00_项目导航", "文档索引", "07_签核状态.json"), "utf8"),
     );
     assert.equal(typeof audit.pendingAssignments, "object");
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("RC6 team mutations create auditable changes and v2 teams can approve a code repo", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-rc6-team-"));
+  const target = path.join(sandbox, "workspace");
+  try {
+    runCli([target, "--initial-signoff=off", "--no-worktrees"]);
+    const teamTool = path.join(target, "tools", "team.mjs");
+    const runTeam = (args) => execFileSync(process.execPath, [teamTool, ...args], {
+      cwd: target, encoding: "utf8",
+    });
+    const addOut = runTeam([
+      "add", "--member=devx", "--name=Dev X", "--email=devx@example.test",
+      "--status=active", "--developer",
+    ]);
+    const addChange = /CHG-\d+/.exec(addOut)?.[0];
+    assert.ok(addChange);
+    const assignOut = runTeam([
+      "assign", "--member=devx", "--hat=backend", "--status=active",
+    ]);
+    const assignChange = /CHG-\d+/.exec(assignOut)?.[0];
+    assert.ok(assignChange);
+    assert.notEqual(addChange, assignChange);
+
+    const python = process.env.PYTHON || "python";
+    execFileSync(python, [path.join(target, "tools", "generate_doc_index.py")], {
+      cwd: target,
+      encoding: "utf8",
+      env: { ...process.env, PYTHONIOENCODING: "utf-8" },
+    });
+    const audit = JSON.parse(fs.readFileSync(
+      path.join(target, "00_项目导航", "文档索引", "07_签核状态.json"),
+      "utf8",
+    ));
+    assert.deepEqual(
+      new Set(audit.pendingAssignments.devx),
+      new Set(["CHG-100", addChange, assignChange]),
+    );
+    assert.match(
+      fs.readFileSync(path.join(target, "00_项目导航", "02_角色与联系方式.md"), "utf8"),
+      /Dev X.*hat:backend/,
+    );
+
+    const repoTool = path.join(target, "tools", "setup-code-repo.mjs");
+    const runRepo = (args) => execFileSync(process.execPath, [repoTool, ...args], {
+      cwd: target, encoding: "utf8",
+    });
+    runRepo(["propose", "--strategy=create", "--repo=v2-app"]);
+    runRepo(["approve", "--decision=REPO-001", "--actor=po"]);
+    runRepo(["approve", "--decision=REPO-001", "--actor=tl"]);
+    assert.match(runRepo(["check", "--decision=REPO-001"]), /READY/);
+    runRepo(["apply", "--decision=REPO-001", "--yes"]);
+    assert.equal(
+      git(path.join(target, "10_代码仓库", "v2-app"), ["rev-parse", "--is-inside-work-tree"]),
+      "true",
+    );
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("RC6 setup-code-repo rejects every non-empty create target", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-rc6-nonempty-"));
+  const target = path.join(sandbox, "workspace");
+  try {
+    runCli([target, "--initial-signoff=off", "--no-worktrees"]);
+    const codeDir = path.join(target, "10_代码仓库", "occupied");
+    fs.mkdirSync(codeDir, { recursive: true });
+    fs.writeFileSync(path.join(codeDir, "existing-secret.txt"), "do not absorb\n", "utf8");
+    fs.appendFileSync(path.join(target, ".gitignore"), "\n10_代码仓库/occupied/\n", "utf8");
+    git(target, ["add", ".gitignore"]);
+    git(target, ["-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "-m", "test: ignore occupied"]);
+
+    const tool = path.join(target, "tools", "setup-code-repo.mjs");
+    const run = (args) => execFileSync(process.execPath, [tool, ...args], {
+      cwd: target, encoding: "utf8",
+    });
+    run(["propose", "--strategy=create", "--repo=occupied"]);
+    run(["approve", "--decision=REPO-001", "--actor=po"]);
+    run(["approve", "--decision=REPO-001", "--actor=tl"]);
+    assert.throws(
+      () => run(["check", "--decision=REPO-001"]),
+      (error) => error.status === 2 && /目标目录非空/.test(String(error.stdout)),
+    );
+    assert.equal(fs.readFileSync(path.join(codeDir, "existing-secret.txt"), "utf8"), "do not absorb\n");
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("RC6 historical Campaign and Closure survive later member identity changes", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-rc6-history-"));
+  const target = path.join(sandbox, "workspace");
+  const roleIds = ["po", "sm", "tl", "midbe", "srfe", "midfe", "fs"];
+  try {
+    runCli([
+      target, "--team-stage=core", "--no-worktrees",
+      ...roleIds.map((id) => `--email.${id}=${id}@example.test`),
+    ]);
+    const store = path.join(target, ".team", "signoffs");
+    const campaignId = fs.readdirSync(path.join(store, "campaigns"))[0].replace(".json", "");
+    const notice = JSON.parse(fs.readFileSync(
+      path.join(store, "notices", `${campaignId}.json`),
+      "utf8",
+    ));
+    const tool = path.join(target, "tools", "signoff.mjs");
+    for (const memberId of ["po", "sm", "tl"]) {
+      execFileSync(process.execPath, [
+        tool, "sign", `--campaign=${campaignId}`, `--member=${memberId}`,
+        `--notice=${notice.digest}`,
+      ], { cwd: target, encoding: "utf8" });
+    }
+    execFileSync(process.execPath, [
+      tool, "close", `--campaign=${campaignId}`, "--actor=sm",
+    ], { cwd: target, encoding: "utf8" });
+
+    const teamTool = path.join(target, "tools", "team.mjs");
+    for (const [memberId, email] of [
+      ["tl", "tl-new@example.test"],
+      ["sm", "sm-new@example.test"],
+    ]) {
+      execFileSync(process.execPath, [
+        teamTool, "update", `--member=${memberId}`, `--email=${email}`,
+      ], { cwd: target, encoding: "utf8" });
+    }
+    const status = execFileSync(process.execPath, [
+      tool, "status", `--campaign=${campaignId}`,
+    ], { cwd: target, encoding: "utf8" });
+    assert.match(status, /tl .*: VALID/);
+    assert.match(status, /Closure: CLOSED/);
+
+    const python = process.env.PYTHON || "python";
+    execFileSync(python, [path.join(target, "tools", "generate_doc_index.py")], {
+      cwd: target,
+      encoding: "utf8",
+      env: { ...process.env, PYTHONIOENCODING: "utf-8" },
+    });
+    const audit = JSON.parse(fs.readFileSync(
+      path.join(target, "00_项目导航", "文档索引", "07_签核状态.json"),
+      "utf8",
+    ));
+    assert.equal(audit.pendingCount, 0);
   } finally {
     fs.rmSync(sandbox, { recursive: true, force: true });
   }

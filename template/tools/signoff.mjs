@@ -425,6 +425,11 @@ function noticeDigest(campaign) {
     .digest("hex");
 }
 
+function storedIdentity(value, fallback) {
+  if (value?.name && value?.email) return { name: value.name, email: value.email };
+  return fallback;
+}
+
 function renderNotice(context, campaign, digest) {
   const lines = [
     `【签核通知｜${campaign.campaignId}｜${campaign.targetBaseline}｜${campaign.mode}】`,
@@ -442,19 +447,20 @@ function renderNotice(context, campaign, digest) {
   lines.push(`截止：${campaign.dueAt}（${campaign.timezone}）`);
   lines.push("身份：无需、也禁止为签核反复修改 git user.name/user.email；命令仅对本次提交使用角色事实源。");
   lines.push("执行：只运行本人下方完整命令；--notice 是一致性摘要（非秘密、非身份认证、非阅读证明），缺失或与批次不符时工具拒绝签核。");
-  for (const [roleId, assignment] of Object.entries(campaign.assignments || {})) {
-    const role = context.roles[roleId];
-    lines.push(`@${role.name} (${roleId})：覆盖 ${assignment.coverage.join(",")}`);
+  for (const [memberId, assignment] of Object.entries(campaign.assignments || {})) {
+    const member = campaign.participants?.[memberId] || context.roles[memberId] || {};
+    const memberOption = Number(campaign.schemaVersion || 0) >= 5 ? "member" : "role";
+    lines.push(`@${member.name || memberId} (${memberId})：覆盖 ${assignment.coverage.join(",")}`);
     lines.push(
       `  node tools/signoff.mjs sign --campaign=${campaign.campaignId}`
-      + ` --role=${roleId} --notice=${digest}`,
+      + ` --${memberOption}=${memberId} --notice=${digest}`,
     );
   }
-  lines.push("完成回复：【签核完成】角色/成员 + 命令输出中的 Event ID；无需手填 commit。");
+  lines.push("完成回复：【签核完成】成员 + 命令输出中的 Event ID；无需手填 commit。");
   lines.push(`验收：SM 运行 node tools/signoff.mjs status --campaign=${campaign.campaignId}`);
   lines.push(
     `关闭：仅 SM 运行 node tools/signoff.mjs close --campaign=${campaign.campaignId}`
-    + ` --actor=${context.smId}；项目全局仍有缺口时工具拒绝关闭。`,
+    + ` --actor=${campaign.createdByRole || context.smId}；项目全局仍有缺口时工具拒绝关闭。`,
   );
   return lines;
 }
@@ -558,39 +564,55 @@ function verifyCampaign(context, campaignId, print = true) {
 
 function evaluate(context, campaignId, print = true) {
   const { file: campaignFile, data: campaign } = loadCampaign(context, campaignId);
-  const campaignEvidence = introduction(context, campaignFile, context.roles[context.smId]);
+  const campaignCreator = storedIdentity(
+    campaign.createdByIdentity,
+    context.roles[campaign.createdByRole || context.smId],
+  );
+  const campaignEvidence = introduction(context, campaignFile, campaignCreator);
   const events = eventFiles(context, campaignId).map((file) => {
     const data = readJson(file);
-    const role = context.roles[data.role];
-    const evidence = role
-      ? introduction(context, file, role)
-      : { ok: false, state: "invalid", detail: `未知角色 ${data.role}` };
+    const memberId = data.memberId || data.role;
+    const expected = campaign.participants?.[memberId] || context.roles[memberId];
+    const evidence = expected
+      ? introduction(context, file, expected)
+      : { ok: false, state: "invalid", detail: `未知成员 ${memberId}` };
     return { file, data, evidence };
   });
 
   const rows = [];
-  for (const [roleId, assignment] of Object.entries(campaign.assignments || {})) {
+  for (const [memberId, assignment] of Object.entries(campaign.assignments || {})) {
     const required = new Set(assignment.coverage || []);
     const validCoverage = new Set();
-    const roleEvents = events.filter((event) => event.data.role === roleId);
+    const expected = campaign.participants?.[memberId] || context.roles[memberId];
+    const roleEvents = events.filter(
+      (event) => (event.data.memberId || event.data.role) === memberId,
+    );
     for (const event of roleEvents) {
       if (event.evidence.ok
-        && event.data.member === context.roles[roleId]?.name
-        && event.data.email?.toLowerCase() === context.roles[roleId]?.email.toLowerCase()) {
+        && event.data.member === expected?.name
+        && event.data.email?.toLowerCase() === expected?.email?.toLowerCase()) {
         for (const item of event.data.coverage || []) validCoverage.add(item);
       }
     }
     const missing = [...required].filter((item) => !validCoverage.has(item));
     const invalid = roleEvents.filter((event) => !event.evidence.ok);
-    rows.push({ roleId, required: [...required], missing, invalid, roleEvents });
+    rows.push({ roleId: memberId, required: [...required], missing, invalid, roleEvents });
   }
 
   const closureFile = closurePath(context, campaignId);
   let closure = null;
   if (fs.existsSync(closureFile)) {
+    const data = readJson(closureFile);
     closure = {
-      data: readJson(closureFile),
-      evidence: introduction(context, closureFile, context.roles[context.smId]),
+      data,
+      evidence: introduction(
+        context,
+        closureFile,
+        storedIdentity(
+          data.closedByIdentity,
+          context.roles[data.closedByRole || campaign.createdByRole || context.smId],
+        ),
+      ),
     };
   }
   const ready = campaignEvidence.ok
@@ -674,7 +696,7 @@ function prepare(context, options) {
       };
     }
     const campaign = {
-      schemaVersion: 4,
+      schemaVersion: 5,
       toolVersion: TOOL_VERSION,
       campaignId,
       mode,
@@ -701,6 +723,7 @@ function prepare(context, options) {
       identityMode: "command-scoped",
       createdAt: localDate(),
       createdByRole: context.smId,
+      createdByIdentity: { memberId: context.smId, name: sm.name, email: sm.email },
       assignments,
       participants,
     };
@@ -772,7 +795,14 @@ function sign(context, options) {
     }
     const assignment = campaign.assignments?.[memberId];
     if (!assignment) fail(`Campaign ${campaignId} 未分配成员/角色 ${memberId}。`);
-    const campaignEvidence = introduction(context, campaignPath(context, campaignId), context.roles[context.smId]);
+    const campaignEvidence = introduction(
+      context,
+      campaignPath(context, campaignId),
+      storedIdentity(
+        campaign.createdByIdentity,
+        context.roles[campaign.createdByRole || context.smId],
+      ),
+    );
     if (!campaignEvidence.ok) fail(`Campaign 尚未由 SM 有效提交：${campaignEvidence.detail}`);
     const noticeFile = noticePath(context, campaignId);
     if (!fs.existsSync(noticeFile)) fail(`Campaign 尚未发布 Notice：${campaignId}`);
@@ -782,7 +812,11 @@ function sign(context, options) {
     if (notice.digest !== digest || suppliedDigest !== digest) {
       fail("Notice 摘要缺失或不匹配；请从 SM 发布的原始 Notice 运行本人完整命令。");
     }
-    const noticeEvidence = introduction(context, noticeFile, context.roles[context.smId]);
+    const noticeEvidence = introduction(
+      context,
+      noticeFile,
+      storedIdentity(notice.publishedByIdentity, context.roles[notice.publishedByRole || context.smId]),
+    );
     if (!noticeEvidence.ok) fail(`Notice 未由 SM 有效发布：${noticeEvidence.detail}`);
     if (JSON.stringify(notice.content) !== JSON.stringify(renderNotice(context, campaign, digest))) {
       fail("Notice 内容与 Campaign 不一致，拒绝签核。");
@@ -865,6 +899,7 @@ function close(context, options) {
       campaignId,
       closedAt: localDate(),
       closedByRole: context.smId,
+      closedByIdentity: { memberId: context.smId, name: sm.name, email: sm.email },
       globalAuditGeneratedAt: globalAudit.generatedAt,
       result: "closed",
       eventIds: status.events.filter((event) => event.evidence.ok).map((event) => event.data.eventId).sort(),
@@ -917,6 +952,7 @@ function publish(context, options) {
     digest,
     publishedAt: localDate(),
     publishedByRole: context.smId,
+    publishedByIdentity: { memberId: context.smId, name: sm.name, email: sm.email },
     auditSnapshot,
     content,
   });

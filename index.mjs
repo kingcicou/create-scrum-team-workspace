@@ -350,9 +350,6 @@ function parseArgs(argv) {
     }
   }
   // RC3：显式命名代码仓（--repo）默认视为“现在建”，除非显式 --git-root/--code-repo。
-  if (result._repoNameFromCli && !result._gitRootFromCli) {
-    result.gitRoot = "repo";
-  }
   return result;
 }
 
@@ -473,21 +470,17 @@ async function completeOptions(options) {
         : "目标代码仓库名（10_代码仓库/<repo>）";
       options.repoName = await ask(rl, repoPrompt, defaultRepo);
     }
-    if (options.repoStrategy === "reuse" && !options._gitRootFromCli) {
-      options.gitRoot = "none";
-      options.setupWorktrees = false;
-    }
     options.gitRoot = await askChoice(
       rl,
       "Git 初始化模式",
       options.repoStrategy === "reuse"
         ? {
-            none: "不初始化代码仓（推荐，复用现有仓库）",
-            workspace: "仅将项目工作区初始化为文档仓",
+            workspace: "仅将项目工作区初始化为文档仓（推荐）",
+            none: "完全不初始化 Git",
           }
         : {
-            repo: "目标代码仓独立初始化（推荐，可自动创建角色 worktree）",
-            workspace: "整个项目工作区作为 Git 仓库",
+            workspace: "仅创建文档治理仓，代码仓 Sprint 0 后按决策补建（推荐）",
+            repo: "立即初始化独立代码仓（技术方案已明确）",
             none: "不自动初始化",
           },
       options.gitRoot,
@@ -761,9 +754,12 @@ function buildReplacements(options, roles) {
   const worktreeRoles = roles.filter((role) => role.worktree);
   const sourceRepo = safeRemoteUrl(options.sourceRepo) || "待确认";
   const isReuse = options.repoStrategy === "reuse";
-  const repoWorkspaceLocation = isReuse
-    ? `现有仓库：${sourceRepo}`
-    : `10_代码仓库/${repoName}/`;
+  const codeRepoNow = options.gitRoot === "repo";
+  const repoWorkspaceLocation = codeRepoNow
+    ? `10_代码仓库/${repoName}/`
+    : isReuse
+      ? `待接入现有仓库：${sourceRepo}`
+      : "Sprint 0 仓库决策卡待审核；尚未创建代码仓";
   const repoAction = {
     reuse: "取得现有仓库权限，基于当前稳定分支建立 Sprint 集成分支；不复制代码历史",
     import: "冻结来源快照，完成去敏与清单核对后导入目标仓库",
@@ -783,10 +779,10 @@ function buildReplacements(options, roles) {
     REPO_WORKSPACE_LOCATION: repoWorkspaceLocation,
     REPO_ACTION: repoAction,
     REPO_INVENTORY_ROWS: renderRepoInventory(options, repoName),
-    REPO_SOP_SETUP_NOTE: isReuse
-      ? `当前为 reuse：生成器不会复制现有代码。先克隆 ${sourceRepo}，再在该克隆中创建 Sprint 分支和角色 worktree。`
-      : `当前为 ${options.repoStrategy}：目标仓位于 10_代码仓库/${repoName}/；生成器启用 worktree 时已统一创建角色工作区。`,
-    CODE_WORKSPACE_REPO_ENTRY: isReuse
+    REPO_SOP_SETUP_NOTE: codeRepoNow
+      ? `代码仓已按 ${options.repoStrategy} 策略初始化于 10_代码仓库/${repoName}/。`
+      : `代码仓尚未创建或接入。PO/TL 先审核 Sprint-0/仓库决策卡，再由执行人运行 tools/setup-code-repo.mjs。`,
+    CODE_WORKSPACE_REPO_ENTRY: !codeRepoNow
       ? ""
       : `,\n    { "path": "10_代码仓库/${repoName}", "name": "💻 Code Repo" }`,
     REPO_NAME: repoName,
@@ -1099,7 +1095,7 @@ function collectTemplatePlan(src, dest, replacements, plan) {
 }
 
 function filterTemplatePlan(plan, target, replacements, options) {
-  if (options.repoStrategy !== "reuse") return plan;
+  if (options.gitRoot === "repo") return plan;
   const repoRoot = path.resolve(target, "10_代码仓库", replacements.REPO_NAME);
   return plan.filter((item) => {
     const candidate = path.resolve(item.dest);
@@ -1365,13 +1361,6 @@ async function main() {
   if (!ROLE_PRESETS[options.preset]) options.preset = "tech";
   if (
     options.repoStrategy === "reuse"
-    && !options._gitRootFromCli
-    && !options._gitRootFromConfig
-  ) {
-    options.gitRoot = "none";
-  }
-  if (
-    options.repoStrategy === "reuse"
     && !options._worktreesFromCli
     && !options._worktreesFromConfig
   ) {
@@ -1401,6 +1390,7 @@ async function main() {
     console.log(`[dry-run] 仓库策略：${replacements.REPO_STRATEGY_LABEL}`);
     console.log(`[dry-run] 来源仓库：${replacements.SOURCE_REPO}`);
     console.log(`[dry-run] 角色套装：${replacements.ROLE_PRESET_LABEL}`);
+    console.log(`[dry-run] 计划代码仓：${replacements.REPO_NAME}（是否创建以 Sprint 0 审批为准）`);
     console.log(`[dry-run] 代码位置：${replacements.REPO_WORKSPACE_LOCATION}`);
     console.log(`[dry-run] Git 模式：${options.gitRoot}`);
     console.log(`[dry-run] 角色 worktree：${options.setupWorktrees ? "5 个" : "不创建"}`);

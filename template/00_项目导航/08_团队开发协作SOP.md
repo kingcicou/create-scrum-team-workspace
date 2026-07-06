@@ -114,7 +114,9 @@ feature/sprint-1/ci-baseline-torvalds-fs-devops
 
 ### 4.3 配置本机 Git 身份（每个 worktree 一次）
 
-> 生成器默认 `repo` 模式下**已自动**为 5 个角色 worktree 调用过 `extensions.worktreeConfig` 与 `--worktree user.name/user.email`。
+> 仅当创建时显式使用 `--git-root=repo` 并启用 worktree，生成器才会自动为编码角色
+> 调用 `extensions.worktreeConfig` 与 `--worktree user.name/user.email`。默认文档仓模式
+> 不会预建代码 worktree；应在 Sprint 0 仓库决策通过后按真实成员建立。
 > 以下命令仅在**手动重建 worktree**、**修正错误身份**、或使用 `--no-worktrees` 后手工创建时才需要。
 
 ```bash
