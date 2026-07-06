@@ -29,6 +29,7 @@ import datetime
 import json
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -1032,6 +1033,10 @@ def overview(docs):
 
 
 def main():
+    # 在Windows上确保UTF-8输出
+    if sys.stdout.encoding.lower() != 'utf-8':
+        sys.stdout.reconfigure(encoding='utf-8')
+    
     docs = collect()
     overview(docs)
     role_monitor(docs)
