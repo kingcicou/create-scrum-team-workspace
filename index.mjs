@@ -515,6 +515,15 @@ async function completeOptions(options) {
       Object.fromEntries(Object.entries(ROLE_PRESETS).map(([key, value]) => [key, value.label])),
       options.preset,
     );
+    options.teamStage = await askChoice(
+      rl,
+      "团队档位",
+      {
+        full: "全员激活（默认，团队已就位）",
+        core: "核心启动团队（仅 PO/SM/TL 激活，交付成员 Sprint 0 后再入队）",
+      },
+      options.teamStage,
+    );
 
     console.log("\n当前角色配置：");
     printRoleSummary(buildRoles(options.preset, options.roleOverrides, options.emailOverrides, options.sprintNumber));

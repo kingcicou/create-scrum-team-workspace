@@ -6,6 +6,13 @@
 
 ## [Unreleased]
 
+### Added
+
+- 角色行动手册 §6「分阶段团队与分批签核」：核心启动团队 vs 交付团队、Sprint 0
+  准入角色最低要求、分批签核模式（initial-core/onboarding/role-change/governance-change）、
+  后续成员手动入队步骤、仓库审批 ≠ 人员签核。
+- 交互式创建新增「团队档位」选项（full/core），补齐 `--team-stage` 的交互入口。
+
 ## [1.0.0-rc.4] - 2026-07-06
 
 ### Added
