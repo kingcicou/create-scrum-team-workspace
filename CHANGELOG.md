@@ -12,6 +12,13 @@
   `loadTeamModel` 读取团队模型，并以 `scrum.scrumMaster` 作为 SM 身份与门禁来源。
   因而 v2 `member-hat-v1` 配置下可使用非 `sm` 的成员 ID 作为 SM；legacy 配置仍投影为
   `sm`，行为保持兼容。新增回归测试覆盖该路径（29/29）。
+- **R4.3b 团队写入命令与审计 v2 兼容**：`tools/team.mjs` 新增 `add/assign` 写能力：
+  写前/写后都执行 `validateTeamModel`；首次写入自动迁移 `roles.config` 到
+  `schemaVersion=2 / model=member-hat-v1`（不按姓名/邮箱自动合并）；`add` 会建议 SM
+  发起 onboarding 批次，`assign` 会建议发起 role-change 批次。同步增强
+  `tools/generate_doc_index.py`：支持从 v2 `members` 计算 active 成员，`closure` 证据按
+  `scrum.scrumMaster` 解析 SM 身份，`signoff_audit` 在 v2 下按成员 ID 聚合。新增回归测试：
+  `team add/assign` 写入迁移、Python 审计 v2 路径；全量 31/31。
 - **R4.3 团队视图与校验命令（只读）**：`tools/team.mjs list` 打印当前团队模型（成员
   及其 `responsibilities`、scrum 的 PO/SM/Developers、帽子 assignment）；`team.mjs
   validate` 运行 `validateTeamModel` 输出 WARN/ERROR（有 error 时退出码 2）。两者纯读、

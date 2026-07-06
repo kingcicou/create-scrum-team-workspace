@@ -1870,3 +1870,99 @@ test("R4.3b signoff resolves SM from v2 scrum.scrumMaster (not hardcoded sm)", (
     fs.rmSync(sandbox, { recursive: true, force: true });
   }
 });
+
+test("R4.3b team.mjs add/assign migrates to v2 and enforces validate-before-write", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-r43b-team-write-"));
+  const target = path.join(sandbox, "workspace");
+  try {
+    runCli([target, "--no-git", "--no-worktrees", "--role.tl=Fowler", "--email.tl=tl@x.dev"]);
+    const tool = path.join(target, "tools", "team.mjs");
+    const cfgFile = path.join(target, "00_项目导航", "roles.config.json");
+
+    const addOut = execFileSync(process.execPath, [
+      tool,
+      "add",
+      "--member=devx",
+      "--name=Dev X",
+      "--email=devx@x.dev",
+      "--status=active",
+      "--developer",
+    ], { cwd: target, encoding: "utf8" });
+    assert.match(addOut, /已新增成员：devx/);
+    assert.match(addOut, /prepare --from-audit/);
+
+    const assignOut = execFileSync(process.execPath, [
+      tool,
+      "assign",
+      "--member=devx",
+      "--hat=backend",
+      "--kind=primary",
+      "--status=active",
+      "--label=Backend",
+    ], { cwd: target, encoding: "utf8" });
+    assert.match(assignOut, /已更新 assignment：devx -> backend/);
+    assert.match(assignOut, /role-change 批次/);
+
+    const cfg = JSON.parse(fs.readFileSync(cfgFile, "utf8"));
+    assert.equal(cfg.schemaVersion, 2);
+    assert.equal(cfg.model, "member-hat-v1");
+    assert.ok(cfg.members.some((m) => m.id === "devx" && m.email === "devx@x.dev"));
+    assert.ok(cfg.assignments.some((a) => a.memberId === "devx" && a.hatId === "backend"));
+    assert.ok(cfg.hats.backend);
+
+    assert.throws(
+      () => execFileSync(process.execPath, [
+        tool,
+        "add",
+        "--member=devy",
+        "--name=Dev Y",
+        "--email=devx@x.dev",
+      ], { cwd: target, encoding: "utf8", stdio: "pipe" }),
+      (error) => error.status === 2,
+    );
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("R4.3b generate_doc_index.py works with v2 member-hat config", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-r43b-py-v2-"));
+  const target = path.join(sandbox, "workspace");
+  try {
+    runCli([target, "--no-git", "--no-worktrees"]);
+    const cfgFile = path.join(target, "00_项目导航", "roles.config.json");
+    const cfg = JSON.parse(fs.readFileSync(cfgFile, "utf8"));
+    const v2 = {
+      ...cfg,
+      schemaVersion: 2,
+      model: "member-hat-v1",
+      members: [
+        { id: "po-a", name: "Jobs", email: "po@example.test", status: "active" },
+        { id: "sm-a", name: "Sutherland", email: "sm@example.test", status: "active" },
+        { id: "dev-a", name: "Fowler", email: "dev@example.test", status: "active" },
+      ],
+      scrum: { productOwner: "po-a", scrumMaster: "sm-a", developers: ["dev-a"] },
+      hats: { tl: { label: "TL" } },
+      assignments: [{ memberId: "dev-a", hatId: "tl", kind: "primary", status: "active" }],
+      roles: {},
+      emails: {},
+      roleDetails: [],
+    };
+    fs.writeFileSync(cfgFile, `${JSON.stringify(v2, null, 2)}\n`, "utf8");
+
+    const py = path.join(target, "tools", "generate_doc_index.py");
+    const pyOut = execFileSync("python", [py], {
+      cwd: target,
+      encoding: "utf8",
+      env: { ...process.env, PYTHONIOENCODING: "cp1252" },
+    });
+    assert.match(pyOut, /\[OK\] 已收录/);
+
+    const audit = JSON.parse(
+      fs.readFileSync(path.join(target, "00_项目导航", "文档索引", "07_签核状态.json"), "utf8"),
+    );
+    assert.equal(typeof audit.pendingAssignments, "object");
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});

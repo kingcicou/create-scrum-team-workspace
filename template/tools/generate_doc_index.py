@@ -115,9 +115,32 @@ def load_role_names():
 KNOWN_PEOPLE, ROLE_TO_PERSON, ROLE_EMAILS, ROLE_CONFIG = load_role_names()
 
 
+def _is_member_hat_v2(config):
+    return (
+        isinstance(config, dict)
+        and config.get("schemaVersion") == 2
+        and config.get("model") == "member-hat-v1"
+    )
+
+
+def _sm_role_id(config):
+    if _is_member_hat_v2(config):
+        return str(config.get("scrum", {}).get("scrumMaster") or "sm").strip()
+    return "sm"
+
+
 def _active_role_ids(config):
     """RC3：仅 status=active 的角色需签核（core 启动团队）。
     旧配置无 status 字段 → 全部视为 active（兼容）。"""
+    if _is_member_hat_v2(config):
+        members = config.get("members", [])
+        if any("status" in m for m in members):
+            return {
+                m.get("id") for m in members
+                if m.get("id") and str(m.get("status", "active")).lower() == "active"
+            }
+        return {m.get("id") for m in members if m.get("id")}
+
     details = config.get("roleDetails", [])
     if details and any("status" in r for r in details):
         return {
@@ -130,6 +153,7 @@ def _active_role_ids(config):
 
 
 ACTIVE_ROLE_IDS = _active_role_ids(ROLE_CONFIG)
+SM_ROLE_ID = _sm_role_id(ROLE_CONFIG)
 SIGNOFF_REPO = (
     ROOT / "10_代码仓库" / str(ROLE_CONFIG.get("repoName", ""))
     if ROLE_CONFIG.get("gitRoot") == "repo"
@@ -730,8 +754,8 @@ def _load_file_signoffs():
             closure_evidence = ""
             state = "open"
             if closure.exists():
-                sm_name = ROLE_TO_PERSON.get("sm", "")
-                sm_email = ROLE_EMAILS.get("sm", "")
+                sm_name = ROLE_TO_PERSON.get(SM_ROLE_ID, "")
+                sm_email = ROLE_EMAILS.get(SM_ROLE_ID, "")
                 closure_evidence = _git_file_evidence(
                     closure.relative_to(SIGNOFF_REPO), sm_name, sm_email
                 )
@@ -784,33 +808,56 @@ def signoff_audit():
     text = charter.read_text(encoding="utf-8", errors="replace")
     fm = parse_frontmatter(text)
     cur = str(fm.get("version", "?"))
-    all_roles = ("PO", "SM", "TL", "Mid.BE/QA", "Sr.FE/UX", "Mid.FE/QA", "FS/DevOps")
-    _id_to_canon = {
-        "po": "PO", "sm": "SM", "tl": "TL", "midbe": "Mid.BE/QA",
-        "srfe": "Sr.FE/UX", "midfe": "Mid.FE/QA", "fs": "FS/DevOps",
-    }
-    active_canon = {_id_to_canon[i] for i in ACTIVE_ROLE_IDS if i in _id_to_canon}
-    roles = tuple(r for r in all_roles if r in active_canon) or all_roles
-    aliases = {
-        "po": "PO", "sm": "SM", "tl": "TL",
-        "midbe": "Mid.BE/QA", "srfe": "Sr.FE/UX",
-        "midfe": "Mid.FE/QA", "fs": "FS/DevOps",
-        "PO/PM": "PO",
-        "TL/Sr.BE": "TL",
-        "Mid.BE": "Mid.BE/QA",
-        "Mid.FE": "Mid.FE/QA",
-        "Sr.FE": "Sr.FE/UX",
-        "FS": "FS/DevOps",
-    }
-    canonical = lambda role: aliases.get(str(role).strip(), str(role).strip())
-    role_ids = {
-        "PO": ("po", "PO"), "SM": ("sm", "SM"), "TL": ("tl", "TL"),
-        "Mid.BE/QA": ("midbe", "Mid.BE"), "Sr.FE/UX": ("srfe", "Sr.FE"),
-        "Mid.FE/QA": ("midfe", "Mid.FE"), "FS/DevOps": ("fs", "FS"),
-    }
-    members = {}
-    for role, keys in role_ids.items():
-        members[role] = next((ROLE_TO_PERSON[k] for k in keys if k in ROLE_TO_PERSON), "—")
+    if _is_member_hat_v2(ROLE_CONFIG):
+        member_ids = [
+            str(m.get("id")) for m in ROLE_CONFIG.get("members", [])
+            if isinstance(m, dict) and m.get("id")
+        ]
+        roles = tuple(r for r in member_ids if r in ACTIVE_ROLE_IDS) or tuple(member_ids)
+
+        # v2 下“角色”即成员 ID；手册中的 legacy 别名保留兼容。
+        aliases = {
+            "PO": "po", "SM": "sm", "TL": "tl",
+            "Mid.BE/QA": "midbe", "Sr.FE/UX": "srfe",
+            "Mid.FE/QA": "midfe", "FS/DevOps": "fs",
+            "PO/PM": "po",
+            "TL/Sr.BE": "tl",
+            "Mid.BE": "midbe",
+            "Mid.FE": "midfe",
+            "Sr.FE": "srfe",
+            "FS": "fs",
+        }
+        canonical = lambda role: aliases.get(str(role).strip(), str(role).strip())
+        role_ids = {role: (role, role) for role in roles}
+        members = {role: ROLE_TO_PERSON.get(role, role) for role in roles}
+    else:
+        all_roles = ("PO", "SM", "TL", "Mid.BE/QA", "Sr.FE/UX", "Mid.FE/QA", "FS/DevOps")
+        _id_to_canon = {
+            "po": "PO", "sm": "SM", "tl": "TL", "midbe": "Mid.BE/QA",
+            "srfe": "Sr.FE/UX", "midfe": "Mid.FE/QA", "fs": "FS/DevOps",
+        }
+        active_canon = {_id_to_canon[i] for i in ACTIVE_ROLE_IDS if i in _id_to_canon}
+        roles = tuple(r for r in all_roles if r in active_canon) or all_roles
+        aliases = {
+            "po": "PO", "sm": "SM", "tl": "TL",
+            "midbe": "Mid.BE/QA", "srfe": "Sr.FE/UX",
+            "midfe": "Mid.FE/QA", "fs": "FS/DevOps",
+            "PO/PM": "PO",
+            "TL/Sr.BE": "TL",
+            "Mid.BE": "Mid.BE/QA",
+            "Mid.FE": "Mid.FE/QA",
+            "Sr.FE": "Sr.FE/UX",
+            "FS": "FS/DevOps",
+        }
+        canonical = lambda role: aliases.get(str(role).strip(), str(role).strip())
+        role_ids = {
+            "PO": ("po", "PO"), "SM": ("sm", "SM"), "TL": ("tl", "TL"),
+            "Mid.BE/QA": ("midbe", "Mid.BE"), "Sr.FE/UX": ("srfe", "Sr.FE"),
+            "Mid.FE/QA": ("midfe", "Mid.FE"), "FS/DevOps": ("fs", "FS"),
+        }
+        members = {}
+        for role, keys in role_ids.items():
+            members[role] = next((ROLE_TO_PERSON[k] for k in keys if k in ROLE_TO_PERSON), "—")
 
     changes = _table_rows(text, "Change ID")
     campaigns = _table_rows(text, "Campaign ID")
