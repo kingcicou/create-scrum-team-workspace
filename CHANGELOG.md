@@ -8,6 +8,11 @@
 
 ### Added
 
+- **R4.3 团队视图与校验命令（只读）**：`tools/team.mjs list` 打印当前团队模型（成员
+  及其 `responsibilities`、scrum 的 PO/SM/Developers、帽子 assignment）；`team.mjs
+  validate` 运行 `validateTeamModel` 输出 WARN/ERROR（有 error 时退出码 2）。两者纯读、
+  不改写 `roles.config`。`add`/`assign` 目前给出提示并指向后续的 v2 写入增强（R4.3b，
+  需先让 signoff/审计以 `scrum.scrumMaster` 解析 SM，而非硬编码 `sm`）。
 - **R4.2b 成员式签核**：`sign --member=<成员ID>`（`--role` 兼容，legacy 下 member id
   === role id）。有 `participants` 的 Campaign 按**快照身份**（name/email）验证并提交，
   Event 记录 `memberId`、快照姓名/邮箱、本次接受的 `responsibilities`、覆盖 Change ID

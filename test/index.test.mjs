@@ -1784,3 +1784,22 @@ test("R4.2b member-based signing records memberId + snapshot responsibilities", 
     fs.rmSync(sandbox, { recursive: true, force: true });
   }
 });
+
+test("R4.3 team.mjs list and validate render the member-hat view", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-team-"));
+  const target = path.join(sandbox, "workspace");
+  try {
+    runCli([target, "--no-git", "--no-worktrees", "--role.tl=Fowler", "--email.tl=tl@x.dev"]);
+    const tool = path.join(target, "tools", "team.mjs");
+    const out = execFileSync(process.execPath, [tool, "list"], { cwd: target, encoding: "utf8" });
+    assert.match(out, /成员：/);
+    assert.match(out, /tl · Fowler <tl@x\.dev>/);
+    assert.match(out, /hat:tl/);
+    assert.match(out, /scrum:developer/);
+    assert.match(out, /SM=sm/);
+    const validated = execFileSync(process.execPath, [tool, "validate"], { cwd: target, encoding: "utf8" });
+    assert.match(validated, /Validate: OK/);
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});
