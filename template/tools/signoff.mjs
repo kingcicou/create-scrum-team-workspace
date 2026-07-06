@@ -760,20 +760,26 @@ function bootstrap(context, options) {
 }
 
 function sign(context, options) {
-  const roleId = normalizeRole(options.role);
-  if (!roleId) fail("sign 需要 --role=<角色槽位>。");
-  const member = roleIdentity(context, roleId);
+  // R4.2b：优先 --member=<成员ID>；--role 兼容（legacy 下 member id === role id）。
+  const memberId = options.member ? String(options.member).trim() : normalizeRole(options.role);
+  if (!memberId) fail("sign 需要 --member=<成员ID> 或 --role=<角色槽位>。");
   withMutationLock(context, () => {
     const campaignId = String(options.campaign || latestCampaignId(context));
     const { data: campaign } = loadCampaign(context, campaignId);
+    // 身份优先取 Campaign 快照（participants），历史不因成员改名/换邮箱失效；
+    // 旧 Campaign 无快照时回落到当前角色事实源。
+    const snapshot = campaign.participants?.[memberId];
+    const member = snapshot
+      ? { name: snapshot.name, email: snapshot.email }
+      : roleIdentity(context, memberId);
     const { instant: dueInstant } = parseDue(campaign.dueAt, campaign.timezone);
     const late = Date.now() > dueInstant;
     const lateBySeconds = late ? Math.round((Date.now() - dueInstant) / 1000) : 0;
     if (late && campaign.dueMode === "hard") {
       fail(`Campaign 为 hard 截止模式且已过期（${campaign.dueAt}），拒绝签核；请由 SM 重建批次。`);
     }
-    const assignment = campaign.assignments?.[roleId];
-    if (!assignment) fail(`Campaign ${campaignId} 未分配角色 ${roleId}。`);
+    const assignment = campaign.assignments?.[memberId];
+    if (!assignment) fail(`Campaign ${campaignId} 未分配成员/角色 ${memberId}。`);
     const campaignEvidence = introduction(context, campaignPath(context, campaignId), context.roles.sm);
     if (!campaignEvidence.ok) fail(`Campaign 尚未由 SM 有效提交：${campaignEvidence.detail}`);
     const noticeFile = noticePath(context, campaignId);
@@ -802,7 +808,8 @@ function sign(context, options) {
     if (fs.existsSync(closurePath(context, campaignId))) fail(`Campaign 已存在 closure，拒绝继续签核：${campaignId}`);
 
     const existing = eventFiles(context, campaignId);
-    const prefix = `EVT-${roleId.toUpperCase()}-${compactDate(localDate())}-`;
+    const idSegment = memberId.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+    const prefix = `EVT-${idSegment}-${compactDate(localDate())}-`;
     let sequence = 1;
     while (existing.some((file) => path.basename(file).startsWith(`${prefix}${String(sequence).padStart(3, "0")}`))) {
       sequence += 1;
@@ -811,12 +818,14 @@ function sign(context, options) {
     const file = path.join(eventDir(context, campaignId), `${eventId}.json`);
     if (fs.existsSync(file)) fail(`Event 已存在：${eventId}`);
     writeJson(file, {
-      schemaVersion: 3,
+      schemaVersion: 4,
       eventId,
       campaignId,
-      role: roleId,
+      role: memberId,
+      memberId,
       member: member.name,
       email: member.email,
+      responsibilities: snapshot?.responsibilities || [],
       targetBaseline: campaign.targetBaseline,
       coverage: assignment.coverage,
       signedAt: localDate(),
@@ -828,7 +837,7 @@ function sign(context, options) {
       noticeDigest: digest,
       result: "accepted",
     });
-    commitOnly(context, file, `sign(${roleId}): ${eventId} · ${campaignId}`, member);
+    commitOnly(context, file, `sign(${memberId}): ${eventId} · ${campaignId}`, member);
     const evidence = introduction(context, file, member);
     if (!evidence.ok) fail(`Event 提交后校验失败：${evidence.detail}`);
     if (late) {

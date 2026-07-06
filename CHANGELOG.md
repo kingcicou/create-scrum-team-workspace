@@ -8,6 +8,11 @@
 
 ### Added
 
+- **R4.2b 成员式签核**：`sign --member=<成员ID>`（`--role` 兼容，legacy 下 member id
+  === role id）。有 `participants` 的 Campaign 按**快照身份**（name/email）验证并提交，
+  Event 记录 `memberId`、快照姓名/邮箱、本次接受的 `responsibilities`、覆盖 Change ID
+  与 Git 作者证据。审计对每个 Event 以其**自身存储的成员/邮箱**（即快照）验签，因此
+  成员后来改名/换邮箱**不会使历史 Event 失效**。旧 Campaign（无 participants）走原路径。
 - **R4.2a Campaign participants 快照**：`prepare`/`bootstrap` 创建 Campaign 时用团队
   模型固化 `participants`（每成员的姓名/邮箱/`responsibilities`/`coverage` 快照）。
   历史 Event 将按此快照验证，不因成员后来改名/换邮箱而失效；不动态读取当前 assignments。

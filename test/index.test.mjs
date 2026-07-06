@@ -1743,3 +1743,44 @@ test("R4.1 validation catches duplicate email and dangling references", () => {
   assert.ok(result.errors.some((e) => /不存在的成员/.test(e)), "应检出悬空成员引用");
   assert.ok(result.errors.some((e) => /未定义的帽子/.test(e)), "应检出未定义帽子");
 });
+
+test("R4.2b member-based signing records memberId + snapshot responsibilities", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-r42b-"));
+  const target = path.join(sandbox, "workspace");
+  const roleIds = ["po", "sm", "tl", "midbe", "srfe", "midfe", "fs"];
+  try {
+    runCli([
+      target,
+      "--git-root=workspace",
+      "--team-stage=core",
+      "--no-worktrees",
+      "--role.tl=Fowler",
+      ...roleIds.map((id) => `--email.${id}=${id}@example.test`),
+    ]);
+    const store = path.join(target, ".team", "signoffs");
+    const campaignId = fs.readdirSync(path.join(store, "campaigns"))[0].replace(".json", "");
+    const notice = JSON.parse(fs.readFileSync(path.join(store, "notices", `${campaignId}.json`), "utf8"));
+    const tool = path.join(target, "tools", "signoff.mjs");
+
+    // 成员式签核：--member=tl（--role 亦兼容）
+    execFileSync(process.execPath, [
+      tool, "sign", `--campaign=${campaignId}`, "--member=tl", `--notice=${notice.digest}`,
+    ], { cwd: target, encoding: "utf8" });
+
+    const evDir = path.join(store, "events", campaignId);
+    const evName = fs.readdirSync(evDir).find((n) => n.startsWith("EVT-TL-"));
+    const ev = JSON.parse(fs.readFileSync(path.join(evDir, evName), "utf8"));
+    assert.equal(ev.memberId, "tl");
+    assert.equal(ev.member, "Fowler");            // 来自 Campaign 快照
+    assert.equal(ev.email, "tl@example.test");
+    assert.ok(ev.responsibilities.includes("hat:tl"));
+    assert.ok(ev.responsibilities.includes("scrum:developer"));
+    // Git 作者 === 快照身份（命令级身份）
+    assert.match(
+      git(target, ["log", "-1", "--format=%an <%ae>", "--", `.team/signoffs/events/${campaignId}/${evName}`]),
+      /Fowler <tl@example\.test>/,
+    );
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});
