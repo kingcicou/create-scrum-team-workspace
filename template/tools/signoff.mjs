@@ -156,12 +156,29 @@ function loadContext(options) {
   const config = readJson(configPath);
   const roles = {};
   for (const [id, name] of Object.entries(config.roles || {})) {
-    roles[id] = { id, name, email: config.emails?.[id] || "" };
+    roles[id] = { id, name, email: config.emails?.[id] || "", status: "active" };
   }
   for (const role of config.roleDetails || []) {
-    roles[role.id] = { id: role.id, name: role.name, email: role.email };
+    roles[role.id] = {
+      id: role.id,
+      name: role.name,
+      email: role.email,
+      status: role.status || "active",
+    };
   }
   if (!roles.sm?.name || !roles.sm?.email) fail("roles.config.json 缺少 SM 姓名或邮箱。");
+
+  // RC3：只有 status=active 的角色需要签核（core 启动团队）；planned/optional 待激活。
+  // 旧配置无 status 字段 → 全部视为 active（兼容）。
+  const details = config.roleDetails || [];
+  const hasStatus = details.some((role) => "status" in role);
+  const activeRoleIds = new Set(
+    hasStatus
+      ? details
+        .filter((role) => String(role.status || "active").toLowerCase() === "active")
+        .map((role) => role.id)
+      : Object.keys(roles),
+  );
 
   const defaultRepo = config.gitRoot === "repo"
     ? path.join(PROJECT_ROOT, "10_代码仓库", config.repoName)
@@ -174,7 +191,7 @@ function loadContext(options) {
   }
   const store = path.join(repo, ".team", "signoffs");
   const lockTimeoutMs = Number(options["lock-timeout"] || 60_000);
-  return { config, roles, repo, store, lockTimeoutMs };
+  return { config, roles, activeRoleIds, repo, store, lockTimeoutMs };
 }
 
 function roleIdentity(context, roleId) {
@@ -639,7 +656,7 @@ function prepare(context, options) {
       const coverage = splitValues(options.coverage);
       if (!target || !coverage.length) fail("prepare 需要 --target、--coverage，或使用 --from-audit。");
       const roleIds = options.roles === "all"
-        ? Object.keys(context.roles)
+        ? [...context.activeRoleIds]
         : splitValues(options.roles).map(normalizeRole);
       if (!roleIds.length) fail("prepare 需要 --roles=all 或角色列表。");
       assignments = Object.fromEntries(roleIds.map((roleId) => [roleId, { coverage }]));
@@ -706,11 +723,11 @@ function bootstrap(context, options) {
   }
 
   const audit = globalAuditOrFail(context);
-  const configuredRoles = Object.keys(context.roles).sort();
+  const configuredRoles = [...context.activeRoleIds].sort();
   const pendingRoles = Object.keys(audit.pendingAssignments || {}).map(normalizeRole).sort();
   const absent = configuredRoles.filter((roleId) => !pendingRoles.includes(roleId));
   if (absent.length) {
-    fail(`首签审计未覆盖全部配置角色：${absent.join(",")}；请先修正角色手册与审计事实源。`);
+    fail(`首签审计未覆盖全部激活(active)角色：${absent.join(",")}；请先修正角色手册与审计事实源。`);
   }
 
   const campaignId = prepare(context, {

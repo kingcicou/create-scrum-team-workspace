@@ -113,6 +113,23 @@ def load_role_names():
 
 
 KNOWN_PEOPLE, ROLE_TO_PERSON, ROLE_EMAILS, ROLE_CONFIG = load_role_names()
+
+
+def _active_role_ids(config):
+    """RC3：仅 status=active 的角色需签核（core 启动团队）。
+    旧配置无 status 字段 → 全部视为 active（兼容）。"""
+    details = config.get("roleDetails", [])
+    if details and any("status" in r for r in details):
+        return {
+            r["id"] for r in details
+            if r.get("id") and str(r.get("status", "active")).lower() == "active"
+        }
+    if details:
+        return {r["id"] for r in details if r.get("id")}
+    return set(config.get("roles", {}).keys())
+
+
+ACTIVE_ROLE_IDS = _active_role_ids(ROLE_CONFIG)
 SIGNOFF_REPO = (
     ROOT / "10_代码仓库" / str(ROLE_CONFIG.get("repoName", ""))
     if ROLE_CONFIG.get("gitRoot") == "repo"
@@ -767,7 +784,13 @@ def signoff_audit():
     text = charter.read_text(encoding="utf-8", errors="replace")
     fm = parse_frontmatter(text)
     cur = str(fm.get("version", "?"))
-    roles = ("PO", "SM", "TL", "Mid.BE/QA", "Sr.FE/UX", "Mid.FE/QA", "FS/DevOps")
+    all_roles = ("PO", "SM", "TL", "Mid.BE/QA", "Sr.FE/UX", "Mid.FE/QA", "FS/DevOps")
+    _id_to_canon = {
+        "po": "PO", "sm": "SM", "tl": "TL", "midbe": "Mid.BE/QA",
+        "srfe": "Sr.FE/UX", "midfe": "Mid.FE/QA", "fs": "FS/DevOps",
+    }
+    active_canon = {_id_to_canon[i] for i in ACTIVE_ROLE_IDS if i in _id_to_canon}
+    roles = tuple(r for r in all_roles if r in active_canon) or all_roles
     aliases = {
         "po": "PO", "sm": "SM", "tl": "TL",
         "midbe": "Mid.BE/QA", "srfe": "Sr.FE/UX",

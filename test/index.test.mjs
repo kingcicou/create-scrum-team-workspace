@@ -1614,3 +1614,32 @@ test("RC3 default create initializes doc-git only and defers the code repo", () 
     fs.rmSync(sandbox, { recursive: true, force: true });
   }
 });
+
+test("RC3 core team stage bootstraps only the active core roles", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-core-"));
+  const target = path.join(sandbox, "workspace");
+  const roleIds = ["po", "sm", "tl", "midbe", "srfe", "midfe", "fs"];
+  try {
+    const output = runCli([
+      target,
+      "--git-root=workspace",
+      "--team-stage=core",
+      "--no-worktrees",
+      ...roleIds.map((id) => `--email.${id}=${id}@example.test`),
+    ]);
+    // 只用 3 个核心角色即可发起首签，不必凑齐 7 人（修复循环依赖）
+    assert.match(output, /首签已发起：SIGN-\d{8}-001/);
+    const campaignDir = path.join(target, ".team", "signoffs", "campaigns");
+    const campaign = JSON.parse(fs.readFileSync(path.join(campaignDir, fs.readdirSync(campaignDir)[0]), "utf8"));
+    assert.deepEqual(Object.keys(campaign.assignments).sort(), ["po", "sm", "tl"]);
+
+    const cfg = JSON.parse(fs.readFileSync(path.join(target, "00_项目导航", "roles.config.json"), "utf8"));
+    assert.equal(cfg.teamStage, "core");
+    const statusOf = (id) => cfg.roleDetails.find((role) => role.id === id).status;
+    assert.equal(statusOf("po"), "active");
+    assert.equal(statusOf("srfe"), "optional");
+    assert.equal(statusOf("fs"), "planned");
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});

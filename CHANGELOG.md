@@ -6,6 +6,26 @@
 
 ## [Unreleased]
 
+### Added
+
+- **分阶段团队模型（核心启动团队 ≠ 交付团队）**：`roles.config.json` 每角色新增
+  `status`（active/optional/planned）+ 顶层 `teamStage`。`--team-stage=core` 只激活
+  PO/SM/TL（srfe 可选、其余 planned）；默认 `full`（全员 active，向后兼容）。
+- `bootstrap`、启动通知门禁与签核审计（Node 与 Python）**只读 active 角色**：
+  修复"必须凑齐 7 人才能首签"的循环依赖——现在核心团队（PO/SM/TL 三人）即可
+  完成 initial-core 首签并启动 Sprint 0，交付成员在模块清晰后再激活并增量首签。
+- 首签自动发布的占位邮箱检查只针对 active 角色，planned 成员不阻塞核心首签。
+
+### Fixed
+
+- 修复项目侧生成器 `active_canon` 引用了未定义的 `ACTIVE_ROLE_IDS` 导致的
+  `NameError`（补齐 `_active_role_ids` 定义）。
+
+### Notes
+
+- 待办（下一增量）：代码仓创建改为 `propose → approve → apply` 结构化审批门禁
+  （与人员签核分离的独立工件）；`team.mjs add` 增量入队自动化留 RC4。
+
 ## [1.0.0-rc.3] - 2026-07-06
 
 ### Changed

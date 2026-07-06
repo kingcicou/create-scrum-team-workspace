@@ -217,6 +217,7 @@ function parseArgs(argv) {
     repoStrategy: "",
     sourceRepo: "",
     preset: "tech",
+    teamStage: "full",
     roleOverrides: {},
     emailOverrides: {},
     gitRoot: "workspace",
@@ -294,6 +295,11 @@ function parseArgs(argv) {
     else if (arg.startsWith("--sprint=")) {
       result.sprintNumber = Number(arg.slice("--sprint=".length));
       result._sprintFromCli = true;
+    }
+    else if (arg.startsWith("--team-stage=")) {
+      // RC3：full=全员 active（默认，兼容）；core=核心启动团队(PO/SM/TL active，其余待激活)
+      result.teamStage = arg.slice("--team-stage=".length);
+      result._teamStageFromCli = true;
     }
     else if (arg.startsWith("--initial-signoff=")) {
       result.initialSignoff = arg.slice("--initial-signoff=".length);
@@ -729,6 +735,15 @@ function renderRepoInventory(options, repoName) {
   return `| R01 | ${target} | 新项目主仓 | 新建 | ${baseline} | 待技术选型 | 准备中 | ${sprint} | FS |`;
 }
 
+function roleStatusFor(id, teamStage) {
+  // RC3 分阶段团队：core 档只激活能开展发现与决策的核心专家；
+  // 交付成员在 Sprint 0 明确模块后再激活。full 档全员 active（兼容）。
+  if (teamStage !== "core") return "active";
+  if (["po", "sm", "tl"].includes(id)) return "active";
+  if (id === "srfe") return "optional";
+  return "planned";
+}
+
 function buildReplacements(options, roles) {
   const preset = ROLE_PRESETS[options.preset] || ROLE_PRESETS.tech;
   const projectName = options.projectName;
@@ -828,6 +843,7 @@ function buildReplacements(options, roles) {
         sourceRepo: safeRemoteUrl(options.sourceRepo),
         preset: options.preset,
         gitRoot: options.gitRoot,
+        teamStage: options.teamStage,
         setupWorktrees: options.setupWorktrees,
         roleTestCommits: options.roleTestCommits,
         remoteUrl: safeRemoteUrl(options.remoteUrl),
@@ -850,6 +866,7 @@ function buildReplacements(options, roles) {
           worktree,
           dirName,
           branchName,
+          status: roleStatusFor(id, options.teamStage),
         })),
       },
       null,
@@ -1208,7 +1225,9 @@ function findPython() {
 
 function setupInitialSignoff(target, options, roles, gitResult) {
   if (options.initialSignoff === "off") return { state: "off", reason: "已由创建者关闭" };
-  const placeholderRoles = roles.filter((role) => /@example\.com$/i.test(role.email));
+  // RC3：首签只覆盖 active 核心角色；planned/optional 成员的占位邮箱不阻塞核心首签。
+  const activeRoles = roles.filter((role) => roleStatusFor(role.id, options.teamStage) === "active");
+  const placeholderRoles = activeRoles.filter((role) => /@example\.com$/i.test(role.email));
   const python = findPython();
   const eligible = options.initialSignoff === "auto"
     && options.gitRoot === "workspace"
