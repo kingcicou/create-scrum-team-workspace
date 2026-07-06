@@ -1267,6 +1267,7 @@ test("v0.10.4 publishes immutable notices before signoff", () => {
     assert.equal(git(repo, ["config", "--worktree", "--get", "user.name"]).trim(), "Shared Workspace");
     const evDir1 = path.join(repo, ".team", "signoffs", "events", "SIGN-TEST-001");
     const evNamePo = fs.readdirSync(evDir1).find((name) => name.startsWith("EVT-PO-"));
+    assert.ok(evNamePo, "EVT-PO-* event file should exist in SIGN-TEST-001");
     assert.equal(
       git(repo, ["log", "-1", "--format=%an <%ae>", "--", `.team/signoffs/events/SIGN-TEST-001/${evNamePo}`]).trim(),
       `${config.roles.po} <${config.emails.po}>`,
@@ -1373,6 +1374,7 @@ test("v0.10.4 publishes immutable notices before signoff", () => {
     const campaignsDir = path.join(repo, ".team", "signoffs", "campaigns");
     const autoCampaignName = fs.readdirSync(campaignsDir)
       .find((name) => !["SIGN-TEST-001.json", "SIGN-TEST-002.json"].includes(name));
+    assert.ok(autoCampaignName, "auto-generated campaign file should exist");
     const autoCampaign = path.join(campaignsDir, autoCampaignName);
     const autoCampaignId = path.basename(autoCampaignName, ".json");
     assert.equal(fs.existsSync(autoCampaign), true);
