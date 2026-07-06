@@ -961,52 +961,59 @@ function renderTaskExecutionTable(roles, today, options) {
     {
       id: "T01", parent: "Sprint Goal", title: "确认价值目标与首批候选 Story", level: "D 决策",
       complexity: "M", owner: "po", reviewer: "sm", start: "立即；项目背景已知",
+      responsibleHat: "po",
       actions: "写清 Sprint Goal；排序候选 Story；为最高优先项补 AC",
       dod: "Goal 可判定；至少 1 个候选 Story 有 AC 和优先级", excludes: "不决定技术实现",
     },
     {
       id: "T02", parent: "Sprint Goal", title: "校准启动节奏、依赖与事实入口", level: "D 流程",
       complexity: "S", owner: "sm", reviewer: "po", start: "立即；无需等待 T01 完成",
-      actions: "发布启动通知；确认任务 Owner；把新增等待/阻塞登记到唯一任务表",
+      responsibleHat: "sm",
+      actions: "发布启动通知；确认任务 Owner(memberId+responsibleHat)；把新增等待/阻塞登记到唯一任务表",
       dod: "全员知道首个动作、前置和状态更新位置", excludes: "不替 PO/TL/FS 作专业决策",
     },
     {
       id: "T03", parent: "T01", title: "形成技术全景与模块拆分草案", level: "A 架构",
       complexity: "L", owner: "tl", reviewer: "po", start: "可立即起草；定版等待 T01",
+      responsibleHat: "tl",
       actions: "记录现状/目标架构；划模块边界；标出需 ADR/Spike 的高风险决策",
       dod: "模块可分派；关键风险、接口和待决策项有明确 Owner", excludes: "不包办各模块实现",
     },
     {
       id: "T04", parent: "T03", title: "后端/API/数据切片准备", level: "I/V 准备",
       complexity: "M", owner: "midbe", reviewer: "tl", start: "等待 T03 给出模块边界；可先列风险",
+      responsibleHat: "backend",
       actions: "细化接口与数据候选；补异常场景和测试点；估算可实现切片",
       dod: "首个后端切片具备输入、输出、AC、测试点和复杂度", excludes: "Sprint 0 不默认要求完整编码",
     },
     {
       id: "T05", parent: "T01/T03", title: "体验基线与前端切片准备", level: "A/I 准备",
       complexity: "M", owner: "srfe", reviewer: "tl", start: "可先做体验草案；定版等待 T01/T03",
+      responsibleHat: "ux",
       actions: "明确关键页面/状态/可访问性约束；给出前端模块和首个切片",
       dod: "关键体验约束可验收；前端切片可交给实现角色", excludes: "不要求完成全部视觉稿",
     },
     {
       id: "T06", parent: "T04/T05", title: "联调与 E2E 验证切片准备", level: "V 验证",
       complexity: "S", owner: "midfe", reviewer: "srfe", start: "等待 T04/T05 的首个切片",
+      responsibleHat: "qa",
       actions: "把 AC 转成联调/E2E 场景；确认测试数据、运行入口和证据格式",
       dod: "至少 1 条关键路径可执行、可失败、可留证", excludes: "不为等待中的接口伪造通过证据",
     },
     {
       id: "T07", parent: "工程准入", title: fsTask, level: "O 工程环境",
       complexity: "S", owner: "fs", reviewer: "tl", start: "立即；仓库策略和角色信息已生成",
+      responsibleHat: "devops",
       actions: fsActions,
       dod: "仓库清单准确；编码角色知道仓库/分支/工作区；至少完成一次访问验证",
       excludes: "不默认新建 CI、部署环境或发布流水线",
     },
   ];
   return [
-    "| ID | 父项 | 任务 | 级别 | 复杂度 | Owner | Reviewer | 可开始条件 | 具体动作 | 完成标准（DoD） | 不包含 | 状态 | 更新 |",
-    "| --- | --- | --- | --- | :---: | --- | --- | --- | --- | --- | --- | --- | --- |",
+    "| ID | 父项 | 任务 | 级别 | 复杂度 | Owner（memberId） | 责任帽子 | Reviewer | 可开始条件 | 具体动作 | 完成标准（DoD） | 不包含 | 状态 | 更新 |",
+    "| --- | --- | --- | --- | :---: | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ...rows.map((row) =>
-      `| ${row.id} | ${row.parent} | ${row.title} | ${row.level} | ${row.complexity} | ${byId[row.owner].name} | ${byId[row.reviewer].name} | ${row.start} | ${row.actions} | ${row.dod} | ${row.excludes} | 未开始 | ${today} |`
+      `| ${row.id} | ${row.parent} | ${row.title} | ${row.level} | ${row.complexity} | ${byId[row.owner].name} (${row.owner}) | ${row.responsibleHat} | ${byId[row.reviewer].name} | ${row.start} | ${row.actions} | ${row.dod} | ${row.excludes} | 未开始 | ${today} |`
     ),
   ].join("\n");
 }
@@ -1023,7 +1030,7 @@ function renderKickoffNotice(roles, options, repoName) {
     "",
     "现在可并行：",
     `@${byId.po} (po)｜T01｜确认 Sprint Goal、首批 Story 与 AC｜完成：至少 1 个候选 Story 可判定验收`,
-    `@${byId.sm} (sm)｜T02｜确认全员首个动作、依赖和状态入口｜完成：启动通知已发、Owner 已确认`,
+    `@${byId.sm} (sm)｜T02｜确认全员首个动作、依赖和状态入口｜完成：启动通知已发、Owner(memberId+responsibleHat) 已确认`,
     `@${byId.tl} (tl)｜T03｜起草技术全景与模块边界｜定版等待 T01；完成：模块可分派、风险有 Owner`,
     `@${byId.srfe} (srfe)｜T05｜先做体验/前端切片草案｜定版等待 T01/T03`,
     `@${byId.fs} (fs)｜T07｜${repoAction}｜完成：仓库/分支/身份/访问验证可复查`,

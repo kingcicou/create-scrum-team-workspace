@@ -8,6 +8,10 @@
 
 ### Added
 
+- **R4.4 任务 Owner 语义升级**：Sprint 任务执行表改为 `Owner（memberId） + 责任帽子`
+  双字段，避免“姓名看起来像角色”造成混淆。任务分派以成员 ID 为唯一身份，帽子只表示
+  本任务责任语义（如 `devops` / `backend` / `qa`），与成员身份解耦。启动通知同步强调
+  `Owner(memberId+responsibleHat)` 确认。
 - **R4.3b Signoff 的 SM 解析去硬编码**：`tools/signoff.mjs` 在加载上下文时统一通过
   `loadTeamModel` 读取团队模型，并以 `scrum.scrumMaster` 作为 SM 身份与门禁来源。
   因而 v2 `member-hat-v1` 配置下可使用非 `sm` 的成员 ID 作为 SM；legacy 配置仍投影为

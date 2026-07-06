@@ -382,7 +382,7 @@ test("generates operations guidance using the repository inventory", () => {
   }
 });
 
-test("generates one Sprint task table with named owners and dependency flow", () => {
+test("generates one Sprint task table with owner memberId + responsibleHat and dependency flow", () => {
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-flow-"));
   const target = path.join(sandbox, "project");
 
@@ -413,8 +413,10 @@ test("generates one Sprint task table with named owners and dependency flow", ()
 
     const content = fs.readFileSync(monitor, "utf8");
     assert.ok(content.includes("| T01 | Sprint Goal |"), "task table should be prefilled");
-    assert.ok(content.includes("| Muse | Tempo |"), "decision task should use preset PO/SM names");
-    assert.ok(content.includes("| Bridge | Forge |"), "environment task should use preset FS/TL names");
+    assert.ok(content.includes("Owner（memberId）"), "task table should show owner memberId column");
+    assert.ok(content.includes("责任帽子"), "task table should show responsibleHat column");
+    assert.ok(content.includes("| Muse (po) | po | Tempo |"), "decision task should bind owner memberId and hat");
+    assert.ok(content.includes("| Bridge (fs) | devops | Forge |"), "environment task should bind owner memberId and hat");
     assert.ok(content.includes("验证目标代码仓与角色工作区"));
     assert.ok(content.includes("不默认新建 CI、部署环境或发布流水线"));
     assert.ok(content.includes("可开始条件"));
@@ -458,6 +460,7 @@ test("generates one Sprint task table with named owners and dependency flow", ()
     assert.ok(kickoffHome.includes("等待输入，但可先准备："));
     assert.ok(kickoffHome.includes("启动通知不等于签核通知"));
     assert.ok(kickoffHome.includes("@Bridge (fs)｜T07"));
+    assert.ok(kickoffHome.includes("Owner(memberId+responsibleHat) 已确认"));
 
     const ledgerDir = path.join(target, "00_项目导航", "06_团队输入输出总表");
     const ledgerIndex = fs.readFileSync(path.join(ledgerDir, "00_索引.md"), "utf8");
