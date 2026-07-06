@@ -8,10 +8,13 @@
 
 ### Added
 
-- 角色行动手册 §6「分阶段团队与分批签核」：核心启动团队 vs 交付团队、Sprint 0
-  准入角色最低要求、分批签核模式（initial-core/onboarding/role-change/governance-change）、
-  后续成员手动入队步骤、仓库审批 ≠ 人员签核。
-- 交互式创建新增「团队档位」选项（full/core），补齐 `--team-stage` 的交互入口。
+- **R4.1 团队模型加载层（member-hat-v1）**：`tools/lib/team-model.mjs` 把两种
+  `roles.config` 归一为标准视图 `members + scrum + hats + assignments`。旧七角色
+  配置**投影**为等价 member-hat 视图（PO/SM→scrum 责任，编码角色→帽子 assignment；
+  Mid.BE/QA→backend+qa 等），纯读、不改写文件、不按姓名/邮箱合并身份。含
+  `validateTeamModel`（重复邮箱、悬空引用、PO=SM 警告）。**纯读，不改变签核/审计行为**
+  （QFD_Ark 审计内容前后一致，仅 generatedAt/sourceHead 每次运行自然变化）。
+- 角色行动手册 §6「分阶段团队与分批签核」；交互式创建新增「团队档位」（full/core）。
 
 ## [1.0.0-rc.4] - 2026-07-06
 

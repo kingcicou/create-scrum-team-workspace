@@ -6,6 +6,13 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { pathToFileURL } from "node:url";
+import {
+  loadTeamModel,
+  projectLegacyConfig,
+  validateTeamModel,
+  memberResponsibilities,
+  activeMemberIds,
+} from "../template/tools/lib/team-model.mjs";
 
 const packageDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const cliPath = path.join(packageDir, "index.mjs");
@@ -1654,4 +1661,78 @@ test("RC3 core team stage bootstraps only the active core roles", () => {
   } finally {
     fs.rmSync(sandbox, { recursive: true, force: true });
   }
+});
+
+test("R4.1 legacy roles.config projects to the member-hat view", () => {
+  const legacy = {
+    roles: { po: "Jobs", sm: "Sutherland", tl: "Fowler", midbe: "Ritchie", srfe: "Norman", midfe: "Evan", fs: "Torvalds" },
+    emails: { po: "jobs@x", sm: "sm@x", tl: "tl@x", midbe: "mb@x", srfe: "sf@x", midfe: "mf@x", fs: "fs@x" },
+    roleDetails: [
+      { id: "po", name: "Jobs", email: "jobs@x", status: "active" },
+      { id: "sm", name: "Sutherland", email: "sm@x", status: "active" },
+      { id: "tl", name: "Fowler", email: "tl@x", status: "active" },
+      { id: "midbe", name: "Ritchie", email: "mb@x", status: "planned" },
+      { id: "srfe", name: "Norman", email: "sf@x", status: "optional" },
+      { id: "midfe", name: "Evan", email: "mf@x", status: "planned" },
+      { id: "fs", name: "Torvalds", email: "fs@x", status: "planned" },
+    ],
+  };
+  const model = loadTeamModel(legacy);
+  assert.equal(model.schemaVersion, 2);
+  assert.equal(model.model, "member-hat-v1");
+  assert.equal(model.members.length, 7);
+  assert.equal(model.scrum.productOwner, "po");
+  assert.equal(model.scrum.scrumMaster, "sm");
+  assert.deepEqual(model.scrum.developers, ["tl", "midbe", "srfe", "midfe", "fs"]);
+  assert.deepEqual(
+    model.assignments.filter((a) => a.memberId === "midbe").map((a) => a.hatId).sort(),
+    ["backend", "qa"],
+  );
+  assert.ok(model.hats.tl && model.hats.backend && model.hats.devops);
+  assert.deepEqual(memberResponsibilities(model, "po"), ["scrum:productOwner"]);
+  assert.deepEqual(memberResponsibilities(model, "tl").sort(), ["hat:tl", "scrum:developer"]);
+  // planned/optional 成员不进入 active 集合（只有 po/sm/tl 是 active）
+  assert.deepEqual(activeMemberIds(model).sort(), ["po", "sm", "tl"]);
+  // 投影是纯读：不篡改原始配置
+  assert.equal(legacy.schemaVersion, undefined);
+});
+
+test("R4.1 member-hat v2 config passes through, warns on PO=SM", () => {
+  const v2 = {
+    schemaVersion: 2,
+    model: "member-hat-v1",
+    members: [
+      { id: "m-a", name: "Alice", email: "a@x", status: "active" },
+      { id: "m-b", name: "Bob", email: "b@x", status: "active" },
+    ],
+    scrum: { productOwner: "m-a", scrumMaster: "m-a", developers: ["m-b"] },
+    hats: { tl: { label: "TL" }, backend: { label: "Backend" } },
+    assignments: [
+      { memberId: "m-b", hatId: "tl", kind: "primary", status: "active" },
+      { memberId: "m-b", hatId: "backend", kind: "primary", status: "active" },
+    ],
+  };
+  const model = loadTeamModel(v2);
+  assert.equal(model.members.length, 2);
+  const result = validateTeamModel(model);
+  assert.equal(result.errors.length, 0);
+  assert.match(result.warnings.join(";"), /PO 与 SM 指向同一成员/);
+});
+
+test("R4.1 validation catches duplicate email and dangling references", () => {
+  const bad = {
+    schemaVersion: 2,
+    model: "member-hat-v1",
+    members: [
+      { id: "m-a", name: "Alice", email: "same@x", status: "active" },
+      { id: "m-b", name: "Bob", email: "SAME@x", status: "active" },
+    ],
+    scrum: { productOwner: "m-a", scrumMaster: "m-b", developers: ["ghost"] },
+    hats: {},
+    assignments: [{ memberId: "ghost", hatId: "nope", kind: "primary", status: "active" }],
+  };
+  const result = validateTeamModel(loadTeamModel(bad));
+  assert.ok(result.errors.some((e) => /同一邮箱/.test(e)), "应检出重复邮箱");
+  assert.ok(result.errors.some((e) => /不存在的成员/.test(e)), "应检出悬空成员引用");
+  assert.ok(result.errors.some((e) => /未定义的帽子/.test(e)), "应检出未定义帽子");
 });
