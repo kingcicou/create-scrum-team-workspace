@@ -218,7 +218,8 @@ test("product reuse records the existing repo without creating a code copy", () 
       path.join(target, "03_迭代运行", "Sprint-0-启动", "01_Sprint任务表与流程看板.md"),
       "utf8",
     );
-    assert.ok(monitor.includes("接入现仓：权限、基线分支、CI、角色工作区"));
+    assert.ok(monitor.includes("接入现有代码仓并验证角色工作区"));
+    assert.ok(monitor.includes("不默认新建 CI、部署环境或发布流水线"));
   } finally {
     fs.rmSync(sandbox, { recursive: true, force: true });
   }
@@ -407,7 +408,10 @@ test("generates one Sprint task table with named owners and dependency flow", ()
     assert.ok(content.includes("| T01 | Sprint Goal |"), "task table should be prefilled");
     assert.ok(content.includes("| Muse | Tempo |"), "decision task should use preset PO/SM names");
     assert.ok(content.includes("| Bridge | Forge |"), "environment task should use preset FS/TL names");
-    assert.ok(content.includes("建立目标仓、CI、Sprint 分支和角色工作区"));
+    assert.ok(content.includes("验证目标代码仓与角色工作区"));
+    assert.ok(content.includes("不默认新建 CI、部署环境或发布流水线"));
+    assert.ok(content.includes("可开始条件"));
+    assert.ok(content.includes("完成标准（DoD）"));
     assert.ok(content.includes("## 4. Sprint 任务执行表"));
     assert.ok(content.includes("不为普通实现任务另写报告"));
     assert.ok(content.includes("| CI 红灯 | 超过 2 小时 | ⚪ |"));
@@ -437,6 +441,16 @@ test("generates one Sprint task table with named owners and dependency flow", ()
     assert.ok(onboarding.includes("01_Sprint任务表与流程看板.md` §4"));
     assert.ok(onboarding.includes("它是拆分概念，不是固定目录"));
     assert.ok(glossary.includes("由 `00_项目导航/00_项目首页.md` 显式指向"));
+
+    const kickoffHome = fs.readFileSync(
+      path.join(target, "00_项目导航", "00_项目首页.md"),
+      "utf8",
+    );
+    assert.ok(kickoffHome.includes("【项目启动通知｜"));
+    assert.ok(kickoffHome.includes("现在可并行："));
+    assert.ok(kickoffHome.includes("等待输入，但可先准备："));
+    assert.ok(kickoffHome.includes("启动通知不等于签核通知"));
+    assert.ok(kickoffHome.includes("@Bridge (fs)｜T07"));
 
     const ledgerDir = path.join(target, "00_项目导航", "06_团队输入输出总表");
     const ledgerIndex = fs.readFileSync(path.join(ledgerDir, "00_索引.md"), "utf8");

@@ -11,19 +11,19 @@
 ### 方式一：Bash 一键执行（macOS / Linux / WSL / Git Bash）
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.1/create.sh) my-project
+bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.2/create.sh) my-project
 ```
 
 可叠加任意 CLI 选项：
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.1/create.sh) my-project --type=new --preset=tech
+bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.2/create.sh) my-project --type=new --preset=tech
 ```
 
 ### 方式二：PowerShell 一键执行（Windows）
 
 ```powershell
-irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.1/create.ps1 | iex
+irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.2/create.ps1 | iex
 ```
 
 执行后会进入交互式创建。也可提前设环境变量传项目名与额外参数：
@@ -31,20 +31,20 @@ irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0
 ```powershell
 $env:PROJECT_NAME="my-project"
 $env:SCRUM_TEMPLATE_ARGS="--type=new --preset=tech"
-irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.1/create.ps1 | iex
+irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.2/create.ps1 | iex
 ```
 
 ### 方式三：npx（全平台，需 Node.js >= 24）
 
 ```bash
 # 直接从 GitHub 执行（推荐，与参考仓库一致）
-npx -y github:kingcicou/create-scrum-team-workspace#v1.0.0-rc.1 my-project
+npx -y github:kingcicou/create-scrum-team-workspace#v1.0.0-rc.2 my-project
 
 # 仅预览不写盘
-npx -y github:kingcicou/create-scrum-team-workspace#v1.0.0-rc.1 my-project --dry-run
+npx -y github:kingcicou/create-scrum-team-workspace#v1.0.0-rc.2 my-project --dry-run
 
 # 交互式
-npx -y github:kingcicou/create-scrum-team-workspace#v1.0.0-rc.1 --interactive
+npx -y github:kingcicou/create-scrum-team-workspace#v1.0.0-rc.2 --interactive
 ```
 
 > 未发布到 npm registry，请使用 `github:` 前缀。
@@ -72,6 +72,10 @@ node index.mjs my-project --type=new --preset=tech
 - 自动生成产品、Backlog、Sprint、工程设计、质量、发布、度量、会议决策目录。
 - 复用 QFD_Ark Sprint 0 实践沉淀的 `05_输入输出管理规范`、`06_团队输入输出总表` 和 `SM_作战手册` 机制。
 - 自动生成 Sprint 任务与流程监控台，展示父项、任务级别、复杂度、Owner、依赖、证据和门禁。
+- 首页自动生成可直接发群的首次团队启动通知，按“现在可并行/等待输入”列出每个
+  角色的首个 Task；它与角色规范首签 Notice 分离。
+- Sprint 0 任务行包含可开始条件、具体动作、DoD 和明确不包含；FS 默认只负责
+  仓库与角色工作区就绪，CI/CD、部署和发布按变化与门禁另立任务。
 - 自动生成依赖时间线、并行泳道和汇合门，并提供成员状态包、SM 确认与状态纠偏闭环。
 - SM/教练可直接生成适合群聊转发的快报、Sprint 流程全景和单角色状态卡。
 - SM 查询入口提供“问题→模板”选择和真实示例；`review-status.mjs` 跨平台检查

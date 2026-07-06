@@ -496,7 +496,7 @@ def stale_audit(docs):
             next_action = "当前无活动批次但仍有待处理；SM 立即建立 incremental/corrective 批次。"
         elif mode == "initial":
             next_action = (
-                "项目创建者/FS 按 09 §10.1 运行一次 bootstrap 并推送；"
+                "项目创建者按 09 §10.1 运行一次 bootstrap 并推送；"
                 "SM 原样转发 Notice、跟踪并关闭，成员运行本人 sign 命令。"
             )
         elif mode == "full-rebaseline":

@@ -793,6 +793,7 @@ function buildReplacements(options, roles) {
     ABILITY_MATRIX: renderAbilityMatrix(roles),
     BACKUP_TABLE: renderBackupTable(roles),
     TASK_EXECUTION_TABLE: renderTaskExecutionTable(roles, today, options),
+    KICKOFF_NOTICE: renderKickoffNotice(roles, options, repoName),
     WORKTREE_DIRS: worktreeRoles.map((role) => `  ${role.dirName}/`).join("\n"),
     WORKTREE_COMMANDS: worktreeRoles
       .map((role) => `git worktree add TeamWork/${role.dirName} -b ${role.branchName} sprint-${options.sprintNumber}`)
@@ -911,23 +912,89 @@ function renderBackupTable(roles) {
 function renderTaskExecutionTable(roles, today, options) {
   const byId = Object.fromEntries(roles.map((role) => [role.id, role]));
   const fsTask = options.repoStrategy === "reuse"
-    ? "接入现仓：权限、基线分支、CI、角色工作区"
-    : "建立目标仓、CI、Sprint 分支和角色工作区";
+    ? "接入现有代码仓并验证角色工作区"
+    : "验证目标代码仓与角色工作区";
+  const fsActions = options.repoStrategy === "reuse"
+    ? "确认远端地址/权限/基线分支；建立或验证 Sprint 分支与编码角色工作区；逐人确认可拉取"
+    : "核对仓库清单；验证 main、Sprint 分支、角色工作区和 Git 身份；逐人确认可拉取";
   const rows = [
-    ["T01", "Sprint Goal", "确认价值目标、Story 与 AC", "D 决策", "M", "po", "sm", "-", "Backlog / AC"],
-    ["T02", "T01", "拆分节奏、依赖和准入门禁", "D 流程", "S", "sm", "po", "T01", "Sprint 计划 / 任务表"],
-    ["T03", "T01", "技术全景、模块边界与关键 ADR", "A 架构", "L", "tl", "fs", "T01", "技术全景 / ADR"],
-    ["T04", "T03", "API、数据与后端实现切片", "I 实现", "M", "midbe", "tl", "T03", "代码 / 测试 / PR"],
-    ["T05", "T01/T03", "体验基线与前端架构切片", "A 架构", "M", "srfe", "tl", "T01,T03", "设计约束 / 关键 PR"],
-    ["T06", "T04/T05", "页面、联调与自动化验证切片", "I/V 实现验证", "S", "midfe", "srfe", "T04,T05", "代码 / 测试证据"],
-    ["T07", "T03", fsTask, "O 工程环境", "M", "fs", "tl", "T03", "仓库清单 / CI / 操作说明"],
+    {
+      id: "T01", parent: "Sprint Goal", title: "确认价值目标与首批候选 Story", level: "D 决策",
+      complexity: "M", owner: "po", reviewer: "sm", start: "立即；项目背景已知",
+      actions: "写清 Sprint Goal；排序候选 Story；为最高优先项补 AC",
+      dod: "Goal 可判定；至少 1 个候选 Story 有 AC 和优先级", excludes: "不决定技术实现",
+    },
+    {
+      id: "T02", parent: "Sprint Goal", title: "校准启动节奏、依赖与事实入口", level: "D 流程",
+      complexity: "S", owner: "sm", reviewer: "po", start: "立即；无需等待 T01 完成",
+      actions: "发布启动通知；确认任务 Owner；把新增等待/阻塞登记到唯一任务表",
+      dod: "全员知道首个动作、前置和状态更新位置", excludes: "不替 PO/TL/FS 作专业决策",
+    },
+    {
+      id: "T03", parent: "T01", title: "形成技术全景与模块拆分草案", level: "A 架构",
+      complexity: "L", owner: "tl", reviewer: "po", start: "可立即起草；定版等待 T01",
+      actions: "记录现状/目标架构；划模块边界；标出需 ADR/Spike 的高风险决策",
+      dod: "模块可分派；关键风险、接口和待决策项有明确 Owner", excludes: "不包办各模块实现",
+    },
+    {
+      id: "T04", parent: "T03", title: "后端/API/数据切片准备", level: "I/V 准备",
+      complexity: "M", owner: "midbe", reviewer: "tl", start: "等待 T03 给出模块边界；可先列风险",
+      actions: "细化接口与数据候选；补异常场景和测试点；估算可实现切片",
+      dod: "首个后端切片具备输入、输出、AC、测试点和复杂度", excludes: "Sprint 0 不默认要求完整编码",
+    },
+    {
+      id: "T05", parent: "T01/T03", title: "体验基线与前端切片准备", level: "A/I 准备",
+      complexity: "M", owner: "srfe", reviewer: "tl", start: "可先做体验草案；定版等待 T01/T03",
+      actions: "明确关键页面/状态/可访问性约束；给出前端模块和首个切片",
+      dod: "关键体验约束可验收；前端切片可交给实现角色", excludes: "不要求完成全部视觉稿",
+    },
+    {
+      id: "T06", parent: "T04/T05", title: "联调与 E2E 验证切片准备", level: "V 验证",
+      complexity: "S", owner: "midfe", reviewer: "srfe", start: "等待 T04/T05 的首个切片",
+      actions: "把 AC 转成联调/E2E 场景；确认测试数据、运行入口和证据格式",
+      dod: "至少 1 条关键路径可执行、可失败、可留证", excludes: "不为等待中的接口伪造通过证据",
+    },
+    {
+      id: "T07", parent: "工程准入", title: fsTask, level: "O 工程环境",
+      complexity: "S", owner: "fs", reviewer: "tl", start: "立即；仓库策略和角色信息已生成",
+      actions: fsActions,
+      dod: "仓库清单准确；编码角色知道仓库/分支/工作区；至少完成一次访问验证",
+      excludes: "不默认新建 CI、部署环境或发布流水线",
+    },
   ];
   return [
-    "| ID | 父项 | 任务 | 级别 | 复杂度 | Owner | Reviewer | 状态 | 前置 | 输出/证据 | 更新 |",
-    "| --- | --- | --- | --- | :---: | --- | --- | --- | --- | --- | --- |",
-    ...rows.map(([id, parent, task, level, complexity, owner, reviewer, predecessor, evidence]) =>
-      `| ${id} | ${parent} | ${task} | ${level} | ${complexity} | ${byId[owner].name} | ${byId[reviewer].name} | 未开始 | ${predecessor} | ${evidence} | ${today} |`
+    "| ID | 父项 | 任务 | 级别 | 复杂度 | Owner | Reviewer | 可开始条件 | 具体动作 | 完成标准（DoD） | 不包含 | 状态 | 更新 |",
+    "| --- | --- | --- | --- | :---: | --- | --- | --- | --- | --- | --- | --- | --- |",
+    ...rows.map((row) =>
+      `| ${row.id} | ${row.parent} | ${row.title} | ${row.level} | ${row.complexity} | ${byId[row.owner].name} | ${byId[row.reviewer].name} | ${row.start} | ${row.actions} | ${row.dod} | ${row.excludes} | 未开始 | ${today} |`
     ),
+  ].join("\n");
+}
+
+function renderKickoffNotice(roles, options, repoName) {
+  const byId = Object.fromEntries(roles.map((role) => [role.id, role.name]));
+  const repoAction = options.repoStrategy === "reuse"
+    ? `接入现有仓库 ${safeRemoteUrl(options.sourceRepo) || "（地址待补）"} 并验证角色工作区`
+    : `验证目标仓库 10_代码仓库/${repoName}/ 及角色工作区`;
+  return [
+    `【项目启动通知｜${options.projectName}｜Sprint 0】`,
+    `当前阶段：启动与奠基｜项目类型：${PROJECT_TYPES[options.type]}｜仓库策略：${REPO_STRATEGIES[options.repoStrategy]}`,
+    "唯一任务入口：03_迭代运行/Sprint-0-启动/01_Sprint任务表与流程看板.md §4",
+    "",
+    "现在可并行：",
+    `@${byId.po} (po)｜T01｜确认 Sprint Goal、首批 Story 与 AC｜完成：至少 1 个候选 Story 可判定验收`,
+    `@${byId.sm} (sm)｜T02｜确认全员首个动作、依赖和状态入口｜完成：启动通知已发、Owner 已确认`,
+    `@${byId.tl} (tl)｜T03｜起草技术全景与模块边界｜定版等待 T01；完成：模块可分派、风险有 Owner`,
+    `@${byId.srfe} (srfe)｜T05｜先做体验/前端切片草案｜定版等待 T01/T03`,
+    `@${byId.fs} (fs)｜T07｜${repoAction}｜完成：仓库/分支/身份/访问验证可复查`,
+    "",
+    "等待输入，但可先准备：",
+    `@${byId.midbe} (midbe)｜T04｜等待 T03 模块边界；先列 API/数据风险和测试点`,
+    `@${byId.midfe} (midfe)｜T06｜等待 T04/T05 首个切片；先准备联调/E2E 检查清单`,
+    "",
+    "明确不做：FS 本轮不默认新建 CI、部署或发布流水线；仅在技术栈、构建方式或平台变化时另建任务。",
+    "状态更新：本人只更新任务行的状态、证据和时间；新增等待/阻塞时 @SM。",
+    "签核另行处理：收到【签核通知】后，每人只运行 Notice 中本人完整命令；启动通知不等于签核通知。",
   ].join("\n");
 }
 
@@ -942,7 +1009,8 @@ function renderSprint0Assignments(roles) {
     `| 后端/API/数据模型初评 | ${byId.tl} | ${byId.midbe} | 04_工程设计/02_API契约 / 03_数据模型 |`,
     `| 前端体验与设计系统初评 | ${byId.srfe} | ${byId.midfe} | 04_工程设计/04_前端设计系统 |`,
     `| 测试策略与质量门禁 | ${byId.midbe}, ${byId.midfe} | ${byId.tl} | 05_质量验证 |`,
-    `| 代码仓库与 CI/CD 基线 | ${byId.fs} | ${byId.tl}, ${byId.midfe} | 10_代码仓库 / 06_发布运维 |`,
+    `| 代码仓库接入与角色工作区验证 | ${byId.fs} | ${byId.tl}, 编码角色 | 仓库清单 / 分支与访问验证 |`,
+    `| CI/CD 变化评估（条件触发） | 未分配 | ${byId.fs}, ${byId.tl} | 仅技术栈/构建/平台变化时建立 Task |`,
   ].join("\n");
 }
 
@@ -1318,14 +1386,15 @@ async function main() {
   console.log("2. 检查 00_项目导航/02_角色与联系方式.md");
   console.log("3. 确认本 Sprint 仓库策略，完善 10_代码仓库/00_仓库清单.md");
   console.log("4. 校准 03_迭代运行/Sprint-0-启动/01_Sprint任务表与流程看板.md");
+  console.log("5. SM 从项目首页复制“首次团队启动通知”发群；这不是签核通知。");
   if (signoffResult.state === "published") {
-    console.log("5. 首签 Notice 已生成：创建者推送后，SM 转发原文并跟踪 status；成员运行本人命令。");
+    console.log("6. 首签 Notice 已生成：创建者推送后，SM 转发原文并跟踪 status；成员运行本人命令。");
   } else if (signoffResult.state === "guide") {
-    console.log(`5. 首签尚未发起（${signoffResult.reason}）。`);
+    console.log(`6. 首签尚未发起（${signoffResult.reason}）。`);
     console.log("   先将整个项目工作区纳入 Git、提交角色事实源并确认真实邮箱，再运行：");
     console.log(`   node tools/signoff.mjs bootstrap --actor=sm --due=${options.initialSignoffDue}`);
   } else {
-    console.log("5. 首签自动化已关闭；需要时由创建者运行 signoff bootstrap。");
+    console.log("6. 首签自动化已关闭；需要时由创建者运行 signoff bootstrap。");
   }
 }
 
