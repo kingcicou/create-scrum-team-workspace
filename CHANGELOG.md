@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 测试去除日期耦合：`v0.10.4 publishes immutable notices` 用当日本地日期动态拼接
+  Campaign（`SIGN-<today>-001`）与 Event（`EVT-PO-<today>-001`）ID，不再硬编码
+  `20260704`；此前非 2026-07-04 当日运行会因 ID 不匹配导致 CI 失败。
+
 ## [0.10.5] - 2026-07-04
 
 ### Changed

@@ -12,6 +12,14 @@ const cliPath = path.join(packageDir, "index.mjs");
 const pkgVersion = JSON.parse(
   fs.readFileSync(path.join(packageDir, "package.json"), "utf8"),
 ).version;
+// 与 signoff.mjs 的 localDate() 一致（本地时区日期），用于拼接当日生成的 Campaign/Event ID。
+const todayCompact = (() => {
+  const now = new Date();
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 10)
+    .replaceAll("-", "");
+})();
 
 function git(cwd, args) {
   return execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8" }).trim();
@@ -1266,7 +1274,7 @@ test("v0.10.4 publishes immutable notices before signoff", () => {
     }
     assert.equal(git(repo, ["config", "--worktree", "--get", "user.name"]).trim(), "Shared Workspace");
     assert.equal(
-      git(repo, ["log", "-1", "--format=%an <%ae>", "--", ".team/signoffs/events/SIGN-TEST-001/EVT-PO-20260704-001.json"]).trim(),
+      git(repo, ["log", "-1", "--format=%an <%ae>", "--", `.team/signoffs/events/SIGN-TEST-001/EVT-PO-${todayCompact}-001.json`]).trim(),
       `${config.roles.po} <${config.emails.po}>`,
     );
 
@@ -1368,7 +1376,8 @@ test("v0.10.4 publishes immutable notices before signoff", () => {
       (error) => error.status === 2,
     );
     runSignoff(["prepare", "--from-audit", "--actor=sm", "--due=2099-07-06 18:00"]);
-    const autoCampaign = path.join(repo, ".team", "signoffs", "campaigns", "SIGN-20260704-001.json");
+    const autoCampaignId = `SIGN-${todayCompact}-001`;
+    const autoCampaign = path.join(repo, ".team", "signoffs", "campaigns", `${autoCampaignId}.json`);
     assert.equal(fs.existsSync(autoCampaign), true);
     const campaign = JSON.parse(fs.readFileSync(autoCampaign, "utf8"));
     assert.deepEqual(campaign.assignments.po.coverage, ["CHG-200"]);
@@ -1386,23 +1395,23 @@ test("v0.10.4 publishes immutable notices before signoff", () => {
     assert.throws(
       () => runSignoff([
         "publish",
-        "--campaign=SIGN-20260704-001",
+        `--campaign=${autoCampaignId}`,
         "--actor=sm",
       ], { stdio: "pipe" }),
       (error) => error.status === 2,
     );
     assert.throws(
-      () => runSignoff(["sign", "--campaign=SIGN-20260704-001", "--role=po"], { stdio: "pipe" }),
+      () => runSignoff(["sign", `--campaign=${autoCampaignId}`, "--role=po"], { stdio: "pipe" }),
       (error) => error.status === 2,
     );
     fs.writeFileSync(manualPath, manual, "utf8");
     assert.match(
-      runSignoff(["verify", "--campaign=SIGN-20260704-001"]),
+      runSignoff(["verify", `--campaign=${autoCampaignId}`]),
       /Verify: OK/,
     );
     const published = runSignoff([
       "publish",
-      "--campaign=SIGN-20260704-001",
+      `--campaign=${autoCampaignId}`,
       "--actor=sm",
     ]);
     assert.match(
@@ -1416,7 +1425,7 @@ test("v0.10.4 publishes immutable notices before signoff", () => {
     assert.throws(
       () => runSignoff([
         "sign",
-        "--campaign=SIGN-20260704-001",
+        `--campaign=${autoCampaignId}`,
         "--role=po",
         "--notice=wrong",
       ], { stdio: "pipe" }),
@@ -1424,19 +1433,19 @@ test("v0.10.4 publishes immutable notices before signoff", () => {
     );
     runSignoff([
       "sign",
-      "--campaign=SIGN-20260704-001",
+      `--campaign=${autoCampaignId}`,
       "--role=po",
       `--notice=${digest}`,
     ]);
     assert.throws(
       () => runSignoff([
         "publish",
-        "--campaign=SIGN-20260704-001",
+        `--campaign=${autoCampaignId}`,
         "--actor=sm",
       ], { stdio: "pipe" }),
       (error) => error.status === 2,
     );
-    runSignoff(["close", "--campaign=SIGN-20260704-001", "--actor=sm"]);
+    runSignoff(["close", `--campaign=${autoCampaignId}`, "--actor=sm"]);
   } finally {
     fs.rmSync(sandbox, { recursive: true, force: true });
   }
