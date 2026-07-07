@@ -333,7 +333,7 @@ test("--remote + --push pushes all branches to a local bare remote", () => {
   }
 });
 
-test("--push refuses placeholder @example.com emails", () => {
+test("--push refuses placeholder Gmail '+' and @example.com emails", () => {
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-guard-"));
   const target = path.join(sandbox, "project");
   const bareRemote = path.join(sandbox, "remote.git");
@@ -350,7 +350,7 @@ test("--push refuses placeholder @example.com emails", () => {
       threw = true;
       const combined = `${error.stdout || ""}${error.stderr || ""}`;
       assert.ok(
-        /example\.com|占位|placeholder/i.test(combined),
+        /kingcicou\.zmh\+|example\.com|占位|placeholder/i.test(combined),
         `error message should mention placeholder email, got: ${combined.slice(0, 200)}`,
       );
     }

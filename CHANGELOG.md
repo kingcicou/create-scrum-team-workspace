@@ -6,6 +6,15 @@
 
 ## [Unreleased]
 
+## [1.0.0-rc.8] - 2026-07-07
+
+### Changed
+
+- **默认邮箱改为 Gmail "+" 地址**：7 个角色默认邮箱从 `{name}@example.com` 改为
+  `kingcicou.zmh+{slotid}@gmail.com`，其中 TL 兼 Sr.BE 使用 `+tl_srbe`。
+  占位邮箱检测和 `--push` 校验同步更新，兼容新旧两种格式。
+- **引导脚本版本号同步**：`create.ps1`、`create.sh`、`README.md` 全部指向 v1.0.0-rc.8。
+
 ## [1.0.0-rc.7] - 2026-07-07
 
 ### Added

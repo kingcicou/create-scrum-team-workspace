@@ -107,6 +107,17 @@ const ROLE_SLOTS = [
   },
 ];
 
+// 默认邮箱 “+” 后缀映射：大部分 slot.id 直接对应，TL 兼 Sr.BE 使用 tl_srbe。
+const ROLE_EMAIL_TAG = Object.fromEntries(ROLE_SLOTS.map((s) => [s.id, s.id]));
+ROLE_EMAIL_TAG.tl = "tl_srbe";
+const DEFAULT_EMAIL_BASE = "kingcicou.zmh";
+const DEFAULT_EMAIL_DOMAIN = "gmail.com";
+// 占位邮箱正则：匹配默认 Gmail "+" 地址和旧版 @example.com。
+const PLACEHOLDER_EMAIL_RE = new RegExp(
+  `(kingcicou\\.zmh\\+[a-z0-9_]+@gmail\\.com$|@(example\\.(com|org|net)|localhost)$)`,
+  "i",
+);
+
 const ROLE_PRESETS = {
   tech: {
     label: "世界技术大神（默认）",
@@ -536,7 +547,7 @@ async function completeOptions(options) {
         const nextName = await ask(rl, `${slot.shortTitle} 名称`, currentName);
         if (nextName && nextName !== currentName) options.roleOverrides[slot.id] = nextName;
         const effectiveName = nextName || currentName;
-        const defaultEmail = options.emailOverrides[slot.id] || `${slug(effectiveName, slot.id)}@example.com`;
+        const defaultEmail = options.emailOverrides[slot.id] || `${DEFAULT_EMAIL_BASE}+${ROLE_EMAIL_TAG[slot.id]}@${DEFAULT_EMAIL_DOMAIN}`;
         const nextEmail = await ask(rl, `${slot.shortTitle} 邮箱`, defaultEmail);
         if (nextEmail && nextEmail !== defaultEmail) options.emailOverrides[slot.id] = nextEmail;
       }
@@ -617,7 +628,7 @@ function buildRoles(presetKey, overrides, emailOverrides = {}, sprintNumber = 1)
   return ROLE_SLOTS.map((slot) => {
     const name = overrides[slot.id] || preset.names[slot.id];
     const nameSlug = slug(name, slot.id);
-    const email = emailOverrides[slot.id] || `${nameSlug}@example.com`;
+    const email = emailOverrides[slot.id] || `${DEFAULT_EMAIL_BASE}+${ROLE_EMAIL_TAG[slot.id]}@${DEFAULT_EMAIL_DOMAIN}`;
     return {
       ...slot,
       name,
@@ -684,7 +695,7 @@ function validateRoles(roles, requireRealEmails = false) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(role.email)) {
       throw new Error(`角色 ${role.id} 的邮箱格式无效：${role.email}`);
     }
-    if (requireRealEmails && /@(example\.(com|org|net)|localhost)$/i.test(role.email)) {
+    if (requireRealEmails && PLACEHOLDER_EMAIL_RE.test(role.email)) {
       throw new Error(`推送远端前必须为角色 ${role.id} 配置真实邮箱，当前为：${role.email}`);
     }
     if (names.has(normalizedName)) throw new Error(`角色名称不能重复：${role.name}`);
@@ -1239,7 +1250,7 @@ function setupInitialSignoff(target, options, roles, gitResult) {
   if (options.initialSignoff === "off") return { state: "off", reason: "已由创建者关闭" };
   // RC3：首签只覆盖 active 核心角色；planned/optional 成员的占位邮箱不阻塞核心首签。
   const activeRoles = roles.filter((role) => roleStatusFor(role.id, options.teamStage) === "active");
-  const placeholderRoles = activeRoles.filter((role) => /@example\.com$/i.test(role.email));
+  const placeholderRoles = activeRoles.filter((role) => PLACEHOLDER_EMAIL_RE.test(role.email));
   const python = findPython();
   const eligible = options.initialSignoff === "auto"
     && options.gitRoot === "workspace"
