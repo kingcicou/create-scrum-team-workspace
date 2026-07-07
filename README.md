@@ -11,19 +11,19 @@
 ### 方式一：Bash 一键执行（macOS / Linux / WSL / Git Bash）
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.6/create.sh) my-project
+bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.7/create.sh) my-project
 ```
 
 可叠加任意 CLI 选项：
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.6/create.sh) my-project --type=new --preset=tech
+bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.7/create.sh) my-project --type=new --preset=tech
 ```
 
 ### 方式二：PowerShell 一键执行（Windows）
 
 ```powershell
-irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.6/create.ps1 | iex
+irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.7/create.ps1 | iex
 ```
 
 执行后会进入交互式创建。也可提前设环境变量传项目名与额外参数：
@@ -31,20 +31,20 @@ irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0
 ```powershell
 $env:PROJECT_NAME="my-project"
 $env:SCRUM_TEMPLATE_ARGS="--type=new --preset=tech"
-irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.6/create.ps1 | iex
+irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.7/create.ps1 | iex
 ```
 
 ### 方式三：npx（全平台，需 Node.js >= 24）
 
 ```bash
 # 直接从 GitHub 执行（推荐，与参考仓库一致）
-npx -y github:kingcicou/create-scrum-team-workspace#v1.0.0-rc.6 my-project
+npx -y github:kingcicou/create-scrum-team-workspace#v1.0.0-rc.7 my-project
 
 # 仅预览不写盘
-npx -y github:kingcicou/create-scrum-team-workspace#v1.0.0-rc.6 my-project --dry-run
+npx -y github:kingcicou/create-scrum-team-workspace#v1.0.0-rc.7 my-project --dry-run
 
 # 交互式
-npx -y github:kingcicou/create-scrum-team-workspace#v1.0.0-rc.6 --interactive
+npx -y github:kingcicou/create-scrum-team-workspace#v1.0.0-rc.7 --interactive
 ```
 
 > 未发布到 npm registry，请使用 `github:` 前缀。
@@ -396,6 +396,83 @@ npm test
 - `--no-worktrees` 跳过角色 worktree 但保留代码仓 Git 初始化
 - `--remote=file://...` + `--push` 推送 `main` + `sprint-<n>` + 5 个个人分支到本地 bare 远端
 - `--push` 在角色邮箱仍是 `@example.com` 占位时拒绝执行
+
+## 辅助工具
+
+生成的工作区 `tools/` 目录下包含以下只读辅助工具。所有工具均**不自动执行任何修改操作**，只提供检查、提示或生成建议。
+
+### 工具总览
+
+| 工具 | 谁用 | 何时用 | 作用 |
+| --- | --- | --- | --- |
+| `signoff.mjs` | SM / 项目创建者 | 首次入队、后续签核编排 | 角色规范签核全生命周期管理（bootstrap → prepare → publish → sign → close） |
+| `team.mjs` | SM | 成员入队、换帽、状态变化 | 团队模型管理，同步角色表、联系人视图和任务分工 |
+| `setup-code-repo.mjs` | FS / TL | Sprint 0 技术方案确认后 | 代码仓创建/接入四步流程（propose → approve → check → apply） |
+| `review-status.mjs` | SM / Review 主持人 | Review/Retro 完成后 | 检查评审纪要追加区唯一性，检测重复标题和锚点问题 |
+| `generate_doc_index.py` | SM | Sprint 末或异常触发 | 多维文档索引生成，只处理 `governance: managed` 产物 |
+| `lint-frontmatter.mjs` | SM / TL | Sprint 末或治理审计 | 只检查 `governance: managed` 文档的 Frontmatter 完整性 |
+| `sprint-close.mjs` | SM | Sprint 关闭前 | 读取任务表和门禁清单，生成 tag message 和更新提醒 |
+| `flow-status.mjs` | SM | Daily Scrum 前 | 读取任务表推断当前阶段，输出阻塞/等待/可并行事项 |
+| `template-diff.mjs` | SM / TL | 模板更新后或 Retro | 对比项目侧与模板侧知识库文件差异，提示待回流/待同步项 |
+| `project-drift.mjs` | SM / TL | Retro 或治理审计 | 检测未替换占位符、项目独有文件和编号一致性问题 |
+
+### 使用示例
+
+**签核与团队管理**
+
+```bash
+# 首次入队签核（创建者/SM）
+node tools/signoff.mjs bootstrap --actor=sm --due=+72h
+
+# 后续签核编排（SM）
+node tools/signoff.mjs prepare --from-audit --actor=sm
+node tools/signoff.mjs publish --campaign=<ID> --actor=sm
+node tools/signoff.mjs status --campaign=<ID>
+node tools/signoff.mjs close --campaign=<ID> --actor=sm
+
+# 成员入队（SM）
+node tools/team.mjs add --member=alice --name=Alice --email=alice@example.com --status=active --developer
+node tools/team.mjs assign --member=alice --hat=backend --status=active
+```
+
+**代码仓创建**
+
+```bash
+node tools/setup-code-repo.mjs propose --strategy=create --repo=my-app
+node tools/setup-code-repo.mjs approve --decision=REPO-001 --actor=po
+node tools/setup-code-repo.mjs approve --decision=REPO-001 --actor=tl
+node tools/setup-code-repo.mjs check --decision=REPO-001
+node tools/setup-code-repo.mjs apply --decision=REPO-001
+```
+
+**Sprint 运行检查**
+
+```bash
+# Daily 前状态检查（SM）
+node tools/flow-status.mjs 03_迭代运行/Sprint-0-启动
+
+# Sprint 关闭助手（SM）
+node tools/sprint-close.mjs 03_迭代运行/Sprint-0-启动
+
+# 评审纪要检查（SM）
+node tools/review-status.mjs 03_迭代运行/Sprint-0-启动/02_Sprint0_Review纪要.md
+```
+
+**治理与偏差扫描**
+
+```bash
+# Frontmatter 检查（只查 governance: managed）
+node tools/lint-frontmatter.mjs --dir=. --verbose
+
+# 知识库文件差异（项目侧 vs 模板侧）
+node tools/template-diff.mjs --content
+
+# 项目偏差检查（占位符/编号/回流候选）
+node tools/project-drift.mjs
+
+# 文档索引生成（需 Python 3）
+python tools/generate_doc_index.py
+```
 
 ## 仓库发布
 
