@@ -962,10 +962,26 @@ async function ask(rl, label, defaultValue) {
 }
 
 async function askChoice(rl, label, choices, defaultKey) {
-  const lines = Object.entries(choices).map(([key, value]) => `  ${key}: ${value}`).join("\n");
-  const defaultLabel = choices[defaultKey] ? `${defaultKey} - ${choices[defaultKey]}` : defaultKey;
-  const answer = await rl.question(`${label}:\n${lines}\n选择 (${defaultLabel}): `);
-  const key = (answer.trim() || defaultKey).toLowerCase();
+  const entries = Object.entries(choices);
+  const lines = entries
+    .map(([key, value], idx) => `  ${idx + 1}. ${value}  [${key}]`)
+    .join("\n");
+  const defaultIdx = entries.findIndex(([key]) => key === defaultKey);
+  const defaultLabel =
+    defaultIdx >= 0
+      ? `${defaultIdx + 1} - ${entries[defaultIdx][1]}`
+      : defaultKey;
+  const answer = await rl.question(`${label}:\n${lines}\n选择 (序号或名称，默认 ${defaultLabel}): `);
+  const trimmed = answer.trim();
+  if (!trimmed) return defaultKey;
+  // 纯数字 → 按序号选择
+  if (/^\d+$/.test(trimmed)) {
+    const idx = parseInt(trimmed, 10) - 1;
+    if (idx >= 0 && idx < entries.length) return entries[idx][0];
+    return defaultKey;
+  }
+  // 否则按 key 匹配
+  const key = trimmed.toLowerCase();
   return choices[key] ? key : defaultKey;
 }
 

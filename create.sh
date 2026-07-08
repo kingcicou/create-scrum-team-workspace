@@ -6,7 +6,7 @@
 # 模板逻辑唯一定义在 index.mjs，不在本脚本里重复实现。
 #
 # Usage (remote, 推荐):
-#   bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.1.0-rc.2/create.sh) my-project
+#   bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.1.0-rc.3/create.sh) my-project
 #
 # Usage (local clone):
 #   ./create.sh my-project --type=new --preset=tech
@@ -16,7 +16,7 @@
 set -euo pipefail
 
 REPO="kingcicou/create-scrum-team-workspace"
-REF="${SCRUM_TEMPLATE_REF:-v1.1.0-rc.2}"
+REF="${SCRUM_TEMPLATE_REF:-v1.1.0-rc.3}"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 
