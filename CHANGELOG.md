@@ -6,6 +6,56 @@
 
 ## [Unreleased]
 
+## [1.1.0-rc.1] - 2026-07-08
+
+### Added
+
+- **团队档位系统**：`--team-profile` 将原有的 2 档（core/full）扩展为 5 档预设：
+  - `full-7`：7 人完整团队（兼容 rc.8 行为）
+  - `core`：3 人核心团队（PO/SM/TL active，其余 planned）
+  - `balanced-5`：5 人精简团队（PO/SM/TL + BE+QA + FE+FS+DevOps）
+  - `lean-3`：3 人小队（PO+SM / TL+BE+QA / FE+FS+DevOps）
+  - `lean-2`：2 人极小队（PO+TL+BE / SM+FE+FS+DevOps+QA）
+  每档包含成员定义（id/primarySlot/hats/status/worktree）、scrum 责任分配和帽子 assignments。
+- **启动模式**：`--startup-mode` 决定仓库和 worktree 策略：
+  - `discovery-first`：只建文档治理仓，不建代码仓和 worktree（兼容默认）
+  - `delivery-ready`：双仓模式——文档治理仓 Git（项目根）+ 独立代码仓 Git（`10_代码仓库/{repo}`），
+    按档位创建成员 worktree。不等于旧 `--git-root=repo` 单仓模式。
+- **`--name-preset`**：`--preset` 的别名，语义更清晰（预设的是名字风格而非角色配置）。
+- **`roles.config.json` v2 升级**：生成 v2 `member-hat-v1` 格式（members/scrum/hats/assignments），
+  同时保留 `teamStage` 兼容字段。`teamProfile`/`startupMode` 作为非破坏性字段加入。
+- **`delivery-ready` 双仓模式**：文档仓 `.gitignore` 排除代码仓目录；代码仓独立 Git init，
+  创建 sprint 分支和成员 worktree（`TeamWork/` 下）；首签在文档仓运行。
+- **worktree 规则**：只承担 PO/SM 管理责任的成员不创建 worktree；承担编码帽子的成员创建 worktree。
+- **`architecture` 帽子**：加入 `HAT_LABELS`，在 lean-3 的 tech-builder 成员中作为 hatId 出现。
+- **11 个 v1.1.0 回归测试**：覆盖 5 档成员数/worktree 数、向后兼容、邮箱格式、双仓独立 Git、首签在文档仓。
+
+### Changed
+
+- `buildRoles` 从 `ROLE_SLOTS.map` 改为 `TEAM_PROFILES[profile].members.map`，支持一人多帽。
+- `renderTaskExecutionTable` 从硬编码 7 slot ID 改为按 member 动态生成。
+- `setupGitWorkspace` 的 FS 执行人查找从 `roles.find(r => r.id === "fs")` 改为按 hatId 查找。
+- `generate_doc_index.py` v2 模式下 `signoff_audit` 使用显示标签（PO/SM 等）而非成员 ID。
+- `setupInitialSignoff` 从 `roleStatusFor(role.id, teamStage)` 改为 `role.status === "active"`。
+- `--git-root=repo` 旧单仓模式继续工作，不受 `--startup-mode` 默认推导影响。
+
+### Fixed
+
+- **`.gitignore` 注释匹配 bug**：模板 `.gitignore` 中被注释掉的 `# 10_代码仓库/repoName/`
+  会被 `includes()` 误判为已有规则，导致 `delivery-ready` 模式下代码仓目录未被 gitignore。
+  修复为逐行精确匹配（非注释行）。
+- **`setupWorktrees` 被错误覆盖**：`discovery-first` 模式的 `createWorktrees: false` 会覆盖
+  `--git-root=repo` 旧模式下应创建 worktree 的行为。添加 `isOldRepoMode()` 检查。
+- **`teamStage` 字段缺失**：`ROLE_JSON` 未写入 `teamStage` 兼容字段，导致下游工具读取失败。
+
+### Backward Compatibility
+
+- `--team-stage=core` → `--team-profile=core`
+- `--team-stage=full` → `--team-profile=full-7`
+- `--preset=tech` → `--name-preset=tech`
+- `--git-root=repo` 旧单仓模式继续工作
+- 无新参数时等价 rc.8 行为（`full-7` + `discovery-first`）
+
 ## [1.0.0-rc.8] - 2026-07-07
 
 ### Changed

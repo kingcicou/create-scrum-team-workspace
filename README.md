@@ -11,19 +11,19 @@
 ### 方式一：Bash 一键执行（macOS / Linux / WSL / Git Bash）
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.8/create.sh) my-project
+bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.1.0-rc.1/create.sh) my-project
 ```
 
 可叠加任意 CLI 选项：
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.8/create.sh) my-project --type=new --preset=tech
+bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.1.0-rc.1/create.sh) my-project --type=new --preset=tech
 ```
 
 ### 方式二：PowerShell 一键执行（Windows）
 
 ```powershell
-irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.8/create.ps1 | iex
+irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.1.0-rc.1/create.ps1 | iex
 ```
 
 执行后会进入交互式创建。也可提前设环境变量传项目名与额外参数：
@@ -31,20 +31,20 @@ irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0
 ```powershell
 $env:PROJECT_NAME="my-project"
 $env:SCRUM_TEMPLATE_ARGS="--type=new --preset=tech"
-irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.0.0-rc.8/create.ps1 | iex
+irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.1.0-rc.1/create.ps1 | iex
 ```
 
 ### 方式三：npx（全平台，需 Node.js >= 24）
 
 ```bash
 # 直接从 GitHub 执行（推荐，与参考仓库一致）
-npx -y github:kingcicou/create-scrum-team-workspace#v1.0.0-rc.8 my-project
+npx -y github:kingcicou/create-scrum-team-workspace#v1.1.0-rc.1 my-project
 
 # 仅预览不写盘
-npx -y github:kingcicou/create-scrum-team-workspace#v1.0.0-rc.8 my-project --dry-run
+npx -y github:kingcicou/create-scrum-team-workspace#v1.1.0-rc.1 my-project --dry-run
 
 # 交互式
-npx -y github:kingcicou/create-scrum-team-workspace#v1.0.0-rc.8 --interactive
+npx -y github:kingcicou/create-scrum-team-workspace#v1.1.0-rc.1 --interactive
 ```
 
 > 未发布到 npm registry，请使用 `github:` 前缀。
@@ -242,6 +242,65 @@ node tools/signoff.mjs bootstrap --actor=sm --due=+72h
 node index.mjs --list-presets
 ```
 
+## 启动路线选择（v1.1.0 新增）
+
+v1.1.0 引入两层启动参数：**启动模式**（`--startup-mode`）决定仓库和 worktree 策略，
+**团队档位**（`--team-profile`）决定团队规模和角色合并。
+
+### 启动模式
+
+| 模式 | 含义 | Git 仓 | Worktree |
+| --- | --- | --- | --- |
+| `discovery-first` | 先探索，只建文档治理仓 | 文档仓（项目根） | 不创建 |
+| `delivery-ready` | 直接交付，双仓模式 | 文档仓 + 独立代码仓 | 按档位创建 |
+
+### 团队档位
+
+| 档位 | 成员数 | 角色构成 | Worktree 数 |
+| --- | --- | --- | --- |
+| `full-7` | 7 | PO / SM / TL / Mid.BE / Sr.FE / Mid.FE / FS | 5 |
+| `core` | 3 active | PO / SM / TL（其余 4 人 planned） | 1（TL） |
+| `balanced-5` | 5 | PO / SM / TL / Mid.BE+QA / Mid.FE+FS+DevOps | 3 |
+| `lean-3` | 3 | PO+SM / TL+BE+QA / FE+FS+DevOps | 2 |
+| `lean-2` | 2 | PO+TL+BE / SM+FE+FS+DevOps+QA | 2 |
+
+> **worktree 规则**：只承担 PO/SM 管理责任的成员不创建 worktree；承担编码帽子的成员创建 worktree。
+
+### 兼容默认 vs 推荐默认
+
+- **兼容默认**（不传新参数）：等价 rc.8 行为，`full-7` + `discovery-first`（仅文档仓）
+- **推荐探索型**：`--startup-mode=discovery-first --team-profile=core`
+- **推荐直接开发**：`--startup-mode=delivery-ready --team-profile=balanced-5`
+- **小队推荐**：`--startup-mode=delivery-ready --team-profile=lean-2`（或 `lean-3`）
+
+### 5 档快速示例
+
+```bash
+# full-7 默认（兼容 rc.8）
+node index.mjs my-project
+
+# core + discovery-first（3 人核心团队，先探索）
+node index.mjs my-project --startup-mode=discovery-first --team-profile=core
+
+# balanced-5 + delivery-ready（5 人直接开发）
+node index.mjs my-project --startup-mode=delivery-ready --team-profile=balanced-5 --repo=my-app
+
+# lean-3 + delivery-ready（3 人小队，PO 兼 SM）
+node index.mjs my-project --startup-mode=delivery-ready --team-profile=lean-3 --repo=my-app
+
+# lean-2 + delivery-ready（2 人极小队）
+node index.mjs my-project --startup-mode=delivery-ready --team-profile=lean-2 --repo=my-app
+```
+
+### 向后兼容
+
+| 旧参数 | 新等价 | 说明 |
+| --- | --- | --- |
+| `--team-stage=core` | `--team-profile=core` | core 档 3 人 active |
+| `--team-stage=full` | `--team-profile=full-7` | 全员 7 人 active |
+| `--preset=tech` | `--name-preset=tech` | 角色命名预设 |
+| `--git-root=repo` | 保持原行为 | 旧单仓模式继续工作 |
+
 ## 项目类型
 
 | type | 含义 |
@@ -280,7 +339,7 @@ node tools/setup-code-repo.mjs apply --decision=REPO-001
 
 ## 团队生命周期
 
-创建时可先用 `--team-stage=core` 激活 PO、SM、TL 等 Sprint 0 核心专家。后续人员
+创建时可先用 `--team-profile=core` 激活 PO、SM、TL 等 Sprint 0 核心专家（兼容旧参数 `--team-stage=core`）。后续人员
 入队或责任变化必须通过团队工具，不直接手改多个视图：
 
 ```bash

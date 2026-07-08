@@ -1016,15 +1016,24 @@ def signoff_audit():
                 state = "✅ 当前有效" + ("；⚠️ 历史证据缺口" if history_gap else "")
             state_rows.append((role, members[role], latest, state))
 
+        # v2 显示标签：标准 7 角色用旧标签，其他用成员 ID
+        _id_to_display = {
+            "po": "PO", "sm": "SM", "tl": "TL", "midbe": "Mid.BE/QA",
+            "srfe": "Sr.FE/UX", "midfe": "Mid.FE/QA", "fs": "FS/DevOps",
+        }
+        _display = lambda mid: _id_to_display.get(mid, mid)
         return {
             "current": cur,
-            "rows": state_rows,
+            "rows": [(_display(r), m, v, s) for r, m, v, s in state_rows],
             "mode": campaign.get("模式", "无活动批次") if campaign else "无活动批次",
-            "scope": scope,
+            "scope": [_display(r) for r in scope],
             "campaign": campaign.get("Campaign ID", "无") if campaign else "无",
             "closed_campaign": closed_campaign,
             "latest_closed_campaign": latest_closed_campaign,
-            "events": rendered_events,
+            "events": [
+                (eid, _display(r) if r != "—" else "—", ver, cov, ev, res)
+                for eid, r, ver, cov, ev, res in rendered_events
+            ],
             "pending_assignments": pending_assignments,
         }
 

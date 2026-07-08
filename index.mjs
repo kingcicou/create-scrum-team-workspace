@@ -5,6 +5,9 @@ import path from "node:path";
 import process from "node:process";
 import readline from "node:readline/promises";
 import { fileURLToPath } from "node:url";
+import { HAT_LABELS } from "./template/tools/lib/team-model.mjs";
+
+const HAT_LABELS_MAP = HAT_LABELS;
 
 const ROLE_SLOTS = [
   {
@@ -193,6 +196,289 @@ const ROLE_PRESETS = {
   },
 };
 
+// ──────────────────────────────────────────────────────────────
+// v1.1.0: 团队档位（TEAM_PROFILES）与启动模式（STARTUP_MODES）
+// ──────────────────────────────────────────────────────────────
+
+const TEAM_PROFILES = {
+  "full-7": {
+    label: "全员 7 人（兼容 rc.8）",
+    members: ROLE_SLOTS.map((s) => ({
+      id: s.id,
+      primarySlot: s.id,
+      title: s.title,
+      shortTitle: s.shortTitle,
+      identity: s.identity,
+      hats: s.hats,
+      hatIds:
+        s.id === "tl" ? ["tl", "architecture"]
+        : s.id === "midbe" ? ["backend", "qa"]
+        : s.id === "srfe" ? ["frontend", "ux"]
+        : s.id === "midfe" ? ["frontend", "qa"]
+        : s.id === "fs" ? ["fs", "devops"]
+        : [],
+      skills: s.skills,
+      backup: s.backup,
+      soul: s.soul,
+      roleCode: s.roleCode,
+      branchRole: s.branchRole,
+      status: "active",
+      worktree: s.worktree,
+    })),
+    scrum: {
+      productOwner: "po",
+      scrumMaster: "sm",
+      developers: ["tl", "midbe", "srfe", "midfe", "fs"],
+    },
+  },
+
+  core: {
+    label: "核心启动组（PO/SM/TL 激活，其余待定）",
+    members: ROLE_SLOTS.map((s) => ({
+      id: s.id,
+      primarySlot: s.id,
+      title: s.title,
+      shortTitle: s.shortTitle,
+      identity: s.identity,
+      hats: s.hats,
+      hatIds:
+        s.id === "tl" ? ["tl", "architecture"]
+        : s.id === "midbe" ? ["backend", "qa"]
+        : s.id === "srfe" ? ["frontend", "ux"]
+        : s.id === "midfe" ? ["frontend", "qa"]
+        : s.id === "fs" ? ["fs", "devops"]
+        : [],
+      skills: s.skills,
+      backup: s.backup,
+      soul: s.soul,
+      roleCode: s.roleCode,
+      branchRole: s.branchRole,
+      status:
+        ["po", "sm", "tl"].includes(s.id) ? "active"
+        : s.id === "srfe" ? "optional" : "planned",
+      worktree: s.id === "tl",
+    })),
+    scrum: {
+      productOwner: "po",
+      scrumMaster: "sm",
+      developers: ["tl", "midbe", "srfe", "midfe", "fs"],
+    },
+  },
+
+  "balanced-5": {
+    label: "平衡 5 人小队",
+    members: [
+      {
+        id: "po", primarySlot: "po",
+        title: "产品负责人 PO", shortTitle: "PO",
+        identity: "价值掌舵者", hats: "PO", hatIds: [],
+        skills: "Product, Discovery, Prioritization",
+        backup: "SM 临时代主持评审", soul: ROLE_SLOTS[0].soul,
+        roleCode: "PO_PM", branchRole: "po-pm",
+        status: "active", worktree: false,
+      },
+      {
+        id: "sm", primarySlot: "sm",
+        title: "Scrum Master", shortTitle: "SM",
+        identity: "流程守护者", hats: "SM", hatIds: [],
+        skills: "Facilitation, Coaching, Flow",
+        backup: "敏捷教练或轮值 SM", soul: ROLE_SLOTS[1].soul,
+        roleCode: "SM", branchRole: "sm",
+        status: "active", worktree: false,
+      },
+      {
+        id: "tl", primarySlot: "tl",
+        title: "技术负责人 / 高级后端", shortTitle: "TL/Sr.BE",
+        identity: "演进式架构守护者", hats: "Tech Lead, Architect, Sr.BE",
+        hatIds: ["tl", "architecture"],
+        skills: "BE, Architecture, Review",
+        backup: "fefs 备份架构讨论", soul: ROLE_SLOTS[2].soul,
+        roleCode: "TL_SrBE", branchRole: "tl-sr-be",
+        status: "active", worktree: true,
+      },
+      {
+        id: "beqa", primarySlot: "midbe",
+        title: "后端工程师（兼 QA 接口侧）", shortTitle: "BE/QA",
+        identity: "业务逻辑精准执行者", hats: "Mid.BE, QA API/Integration",
+        hatIds: ["backend", "qa"],
+        skills: "BE, QA, Integration Test",
+        backup: "TL 指导", soul: ROLE_SLOTS[3].soul,
+        roleCode: "MidBE_QA", branchRole: "mid-be-qa",
+        status: "active", worktree: true,
+      },
+      {
+        id: "fefs", primarySlot: "fs",
+        title: "前端全栈工程师（兼 DevOps）", shortTitle: "FE/FS/DevOps",
+        identity: "全链路闭环者", hats: "Sr.FE, Full-stack, DevOps",
+        hatIds: ["frontend", "fs", "devops"],
+        skills: "FE, FS, DevOps, CI/CD",
+        backup: "TL 备份后端", soul: ROLE_SLOTS[6].soul,
+        roleCode: "SrFE_FS_DevOps", branchRole: "fe-fs-devops",
+        status: "active", worktree: true,
+      },
+    ],
+    scrum: {
+      productOwner: "po",
+      scrumMaster: "sm",
+      developers: ["tl", "beqa", "fefs"],
+    },
+  },
+
+  "lean-3": {
+    label: "精简 3 人交付组",
+    members: [
+      {
+        id: "product-coach", primarySlot: "po",
+        title: "产品教练（PO+SM）", shortTitle: "PO/SM",
+        identity: "价值掌舵与流程守护", hats: "PO, SM", hatIds: [],
+        skills: "Product, Scrum, Prioritization",
+        backup: "tech-builder 临时代主持", soul: ROLE_SLOTS[0].soul,
+        roleCode: "PO_SM", branchRole: "po-sm",
+        status: "active", worktree: false,
+      },
+      {
+        id: "tech-builder", primarySlot: "tl",
+        title: "技术构建者（TL+后端+QA）", shortTitle: "TL/BE/QA",
+        identity: "演进式架构与交付", hats: "Tech Lead, Backend, QA",
+        hatIds: ["tl", "architecture", "backend", "qa"],
+        skills: "BE, Architecture, QA, Review",
+        backup: "delivery-builder 备份后端", soul: ROLE_SLOTS[2].soul,
+        roleCode: "TL_BE_QA", branchRole: "tl-be-qa",
+        status: "active", worktree: true,
+      },
+      {
+        id: "delivery-builder", primarySlot: "fs",
+        title: "交付构建者（前端+全栈+DevOps）", shortTitle: "FE/FS/DevOps",
+        identity: "全链路闭环者", hats: "Frontend, Full-stack, DevOps",
+        hatIds: ["frontend", "fs", "devops"],
+        skills: "FE, FS, DevOps, CI/CD",
+        backup: "tech-builder 备份前端", soul: ROLE_SLOTS[6].soul,
+        roleCode: "FE_FS_DevOps", branchRole: "fe-fs-devops",
+        status: "active", worktree: true,
+      },
+    ],
+    scrum: {
+      productOwner: "product-coach",
+      scrumMaster: "product-coach",
+      developers: ["tech-builder", "delivery-builder"],
+    },
+  },
+
+  "lean-2": {
+    label: "极简 2 人交付组",
+    members: [
+      {
+        id: "lead-a", primarySlot: "po",
+        title: "负责人 A（PO+TL+后端）", shortTitle: "PO/TL/BE",
+        identity: "价值掌舵与架构落地", hats: "PO, Tech Lead, Backend, Architecture",
+        hatIds: ["architecture", "backend"],
+        skills: "Product, BE, Architecture, Review",
+        backup: "lead-b 备份后端", soul: ROLE_SLOTS[2].soul,
+        roleCode: "PO_TL_BE", branchRole: "po-tl-be",
+        status: "active", worktree: true,
+      },
+      {
+        id: "lead-b", primarySlot: "sm",
+        title: "负责人 B（SM+前端+全栈+DevOps+QA）", shortTitle: "SM/FE/FS/DevOps/QA",
+        identity: "流程守护与全链路交付", hats: "SM, Frontend, Full-stack, DevOps, QA",
+        hatIds: ["frontend", "fs", "devops", "qa"],
+        skills: "FE, FS, DevOps, QA, Scrum",
+        backup: "lead-a 备份前端", soul: ROLE_SLOTS[6].soul,
+        roleCode: "SM_FE_FS_DevOps_QA", branchRole: "sm-fe-fs-devops-qa",
+        status: "active", worktree: true,
+      },
+    ],
+    scrum: {
+      productOwner: "lead-a",
+      scrumMaster: "lead-b",
+      developers: ["lead-a", "lead-b"],
+    },
+  },
+};
+
+const STARTUP_MODES = {
+  "discovery-first": {
+    label: "先探索（仅文档仓 Git，不建代码仓）",
+    gitRoot: "workspace",
+    createCodeRepo: false,
+    createWorktrees: false,
+  },
+  "delivery-ready": {
+    label: "直接交付（文档仓 + 独立代码仓 + worktree）",
+    gitRoot: "workspace",
+    createCodeRepo: true,
+    createWorktrees: true,
+  },
+};
+
+function isOldRepoMode(options) {
+  return options.gitRoot === "repo" && options._gitRootFromCli && options.startupMode !== "delivery-ready";
+}
+
+function resolveDefaults(options) {
+  // 兼容旧参数：--team-stage → --team-profile
+  if (options.teamStage && !options.teamProfile) {
+    options.teamProfile = options.teamStage === "core" ? "core" : "full-7";
+  }
+  // 兼容旧参数：--preset → --name-preset
+  if (options.preset && !options.namePreset) {
+    options.namePreset = options.preset;
+  }
+  // 兼容旧参数：--code-repo → --startup-mode
+  if (options._codeRepoFromCli && !options.startupMode) {
+    options.startupMode = options.gitRoot === "repo" ? "delivery-ready" : "discovery-first";
+  }
+  // 兼容旧参数：--git-root=repo → 不映射到 delivery-ready（旧单仓模式继续工作）
+
+  if (!options.teamProfile) options.teamProfile = options._teamStageFromCli ? (options.teamStage === "core" ? "core" : "full-7") : "full-7";
+  if (!options.namePreset) options.namePreset = options.preset || "tech";
+
+  // startup-mode 默认推导
+  if (!options.startupMode) {
+    if (options.gitRoot === "repo" && options._gitRootFromCli) {
+      // 旧 --git-root=repo 继续工作，不映射到 delivery-ready
+      options.startupMode = "discovery-first";
+    } else if (options.teamProfile === "core") {
+      options.startupMode = "discovery-first";
+    } else if (["lean-2", "lean-3", "balanced-5"].includes(options.teamProfile)) {
+      options.startupMode = "delivery-ready";
+    } else {
+      options.startupMode = "discovery-first";
+    }
+  }
+
+  // team-profile 默认推导（仅当用户指定了 startup-mode 但没指定 team-profile）
+  if (options._startupModeFromCli && !options._teamProfileFromCli && !options._teamStageFromCli) {
+    if (options.startupMode === "delivery-ready" && options.teamProfile === "full-7") {
+      options.teamProfile = "balanced-5";
+    } else if (options.startupMode === "discovery-first" && options.teamProfile === "full-7") {
+      // 用户显式选 discovery-first，默认推荐 core
+      // 但如果同时指定了 team-profile，则尊重用户选择
+    }
+  }
+
+  // 同步 gitRoot：delivery-ready 的 gitRoot 保持 workspace（双仓模式）
+  const mode = STARTUP_MODES[options.startupMode];
+  if (mode && !options._gitRootFromCli) {
+    options.gitRoot = mode.gitRoot;
+  }
+
+  // delivery-ready 模式下自动设置 setupWorktrees
+  if (mode && mode.createWorktrees && !options._worktreesFromCli) {
+    options.setupWorktrees = true;
+  }
+  // discovery-first 模式下不创建 worktree（但旧 --git-root=repo 模式保持原行为）
+  if (mode && !mode.createWorktrees && !options._worktreesFromCli && !isOldRepoMode(options)) {
+    options.setupWorktrees = false;
+  }
+  // 旧 --git-root=repo 模式：默认创建 worktree（除非用户显式 --no-worktrees）
+  if (isOldRepoMode(options) && !options._worktreesFromCli) {
+    options.setupWorktrees = true;
+  }
+
+  return options;
+}
+
 const PROJECT_TYPES = {
   new: "从零新项目",
   legacy: "存量项目重构",
@@ -228,7 +514,10 @@ function parseArgs(argv) {
     repoStrategy: "",
     sourceRepo: "",
     preset: "tech",
-    teamStage: "full",
+    namePreset: "",
+    teamStage: "",
+    teamProfile: "",
+    startupMode: "",
     roleOverrides: {},
     emailOverrides: {},
     gitRoot: "workspace",
@@ -308,9 +597,26 @@ function parseArgs(argv) {
       result._sprintFromCli = true;
     }
     else if (arg.startsWith("--team-stage=")) {
-      // RC3：full=全员 active（默认，兼容）；core=核心启动团队(PO/SM/TL active，其余待激活)
-      result.teamStage = arg.slice("--team-stage=".length);
+      // 兼容：--team-stage=core → teamProfile=core；--team-stage=full → teamProfile=full-7
+      const stage = arg.slice("--team-stage=".length);
+      result.teamStage = stage;
+      result.teamProfile = stage === "core" ? "core" : "full-7";
       result._teamStageFromCli = true;
+      result._teamProfileFromCli = true;
+    }
+    else if (arg.startsWith("--team-profile=")) {
+      result.teamProfile = arg.slice("--team-profile=".length);
+      result._teamProfileFromCli = true;
+    }
+    else if (arg.startsWith("--startup-mode=")) {
+      result.startupMode = arg.slice("--startup-mode=".length);
+      result._startupModeFromCli = true;
+    }
+    else if (arg.startsWith("--name-preset=")) {
+      result.namePreset = arg.slice("--name-preset=".length);
+      result._namePresetFromCli = true;
+      result.preset = result.namePreset;
+      result._presetFromCli = true;
     }
     else if (arg.startsWith("--initial-signoff=")) {
       result.initialSignoff = arg.slice("--initial-signoff=".length);
@@ -338,12 +644,17 @@ function parseArgs(argv) {
       result._sourceRepoFromCli = true;
     }
     else if (arg.startsWith("--preset=")) {
+      // 兼容：--preset → namePreset
       result.preset = arg.slice("--preset=".length);
+      result.namePreset = result.preset;
       result._presetFromCli = true;
+      result._namePresetFromCli = true;
     }
     else if (arg.startsWith("--roles=")) {
       result.preset = arg.slice("--roles=".length);
+      result.namePreset = result.preset;
       result._presetFromCli = true;
+      result._namePresetFromCli = true;
     }
     else if (arg.startsWith("--repo=")) {
       result.repoName = arg.slice("--repo=".length);
@@ -385,7 +696,26 @@ function loadConfigFile(options) {
     options.repoStrategy = String(raw.repoStrategy);
   }
   if (raw.sourceRepo && !options._sourceRepoFromCli) options.sourceRepo = String(raw.sourceRepo);
-  if (raw.preset && !options._presetFromCli) options.preset = String(raw.preset);
+  if (raw.preset && !options._presetFromCli) {
+    options.preset = String(raw.preset);
+    if (!options._namePresetFromCli) options.namePreset = options.preset;
+  }
+  if (raw.namePreset && !options._namePresetFromCli) {
+    options.namePreset = String(raw.namePreset);
+    options.preset = options.namePreset;
+  }
+  if (raw.teamProfile && !options._teamProfileFromCli) {
+    options.teamProfile = String(raw.teamProfile);
+  }
+  if (raw.startupMode && !options._startupModeFromCli) {
+    options.startupMode = String(raw.startupMode);
+  }
+  if (raw.teamStage && !options._teamStageFromCli) {
+    options.teamStage = String(raw.teamStage);
+    if (!options._teamProfileFromCli) {
+      options.teamProfile = raw.teamStage === "core" ? "core" : "full-7";
+    }
+  }
   if (raw.gitRoot && !options._gitRootFromCli) {
     options.gitRoot = String(raw.gitRoot);
     options._gitRootFromConfig = true;
@@ -513,51 +843,64 @@ async function completeOptions(options) {
         options.initialSignoffDue,
       );
     }
+    options.startupMode = await askChoice(
+      rl,
+      "启动模式",
+      Object.fromEntries(Object.entries(STARTUP_MODES).map(([key, value]) => [key, value.label])),
+      options.startupMode || "discovery-first",
+    );
+    options.teamProfile = await askChoice(
+      rl,
+      "团队档位",
+      Object.fromEntries(Object.entries(TEAM_PROFILES).map(([key, value]) => [key, value.label])),
+      options.teamProfile || "full-7",
+    );
     options.preset = await askChoice(
       rl,
       "角色命名套装",
       Object.fromEntries(Object.entries(ROLE_PRESETS).map(([key, value]) => [key, value.label])),
       options.preset,
     );
-    options.teamStage = await askChoice(
-      rl,
-      "团队档位",
-      {
-        full: "全员激活（默认，团队已就位）",
-        core: "核心启动团队（仅 PO/SM/TL 激活，交付成员 Sprint 0 后再入队）",
-      },
-      options.teamStage,
-    );
+
+    // 同步 gitRoot 和 setupWorktrees
+    const mode = STARTUP_MODES[options.startupMode];
+    if (mode && !options._gitRootFromCli) options.gitRoot = mode.gitRoot;
+    if (mode && !options._worktreesFromCli) options.setupWorktrees = mode.createWorktrees;
 
     console.log("\n当前角色配置：");
-    printRoleSummary(buildRoles(options.preset, options.roleOverrides, options.emailOverrides, options.sprintNumber));
+    printRoleSummary(buildRoles(options.preset, options.roleOverrides, options.emailOverrides, options.sprintNumber, options.teamProfile));
     const customize = await ask(
       rl,
-      "要调整哪些角色？输入槽位并用逗号分隔（po,sm,tl,midbe,srfe,midfe,fs），all=全部，none=不调整",
+      "要调整哪些成员？输入 memberId 并用逗号分隔，all=全部，none=不调整",
       "none",
     );
     if (customize.trim().toLowerCase() !== "none") {
-      const base = buildRoles(options.preset, options.roleOverrides, options.emailOverrides, options.sprintNumber);
+      const base = buildRoles(options.preset, options.roleOverrides, options.emailOverrides, options.sprintNumber, options.teamProfile);
+      const profile = TEAM_PROFILES[options.teamProfile] || TEAM_PROFILES["full-7"];
       const requested = customize.trim().toLowerCase() === "all"
-        ? new Set(ROLE_SLOTS.map((slot) => slot.id))
-        : new Set(customize.split(",").map((id) => normalizeRoleId(id.trim())));
-      for (const slot of ROLE_SLOTS.filter((item) => requested.has(item.id))) {
-        const currentRole = base.find((role) => role.id === slot.id);
+        ? new Set(profile.members.map((m) => m.id))
+        : new Set(customize.split(",").map((id) => id.trim()));
+      for (const member of profile.members.filter((m) => requested.has(m.id))) {
+        const currentRole = base.find((role) => role.id === member.id);
         const currentName = currentRole?.name || "";
-        const nextName = await ask(rl, `${slot.shortTitle} 名称`, currentName);
-        if (nextName && nextName !== currentName) options.roleOverrides[slot.id] = nextName;
+        const nextName = await ask(rl, `${member.shortTitle} 名称`, currentName);
+        if (nextName && nextName !== currentName) options.roleOverrides[member.id] = nextName;
         const effectiveName = nextName || currentName;
-        const defaultEmail = options.emailOverrides[slot.id] || `${DEFAULT_EMAIL_BASE}+${ROLE_EMAIL_TAG[slot.id]}@${DEFAULT_EMAIL_DOMAIN}`;
-        const nextEmail = await ask(rl, `${slot.shortTitle} 邮箱`, defaultEmail);
-        if (nextEmail && nextEmail !== defaultEmail) options.emailOverrides[slot.id] = nextEmail;
+        const emailTag = member.id.replace(/-/g, "_");
+        const defaultEmail = options.emailOverrides[member.id] || `${DEFAULT_EMAIL_BASE}+${emailTag}@${DEFAULT_EMAIL_DOMAIN}`;
+        const nextEmail = await ask(rl, `${member.shortTitle} 邮箱`, defaultEmail);
+        if (nextEmail && nextEmail !== defaultEmail) options.emailOverrides[member.id] = nextEmail;
       }
     }
 
     if (!PROJECT_TYPES[options.type]) options.type = "new";
     if (!ROLE_PRESETS[options.preset]) options.preset = "tech";
-    if (!["workspace", "repo", "none"].includes(options.gitRoot)) options.gitRoot = "repo";
-    if (options.gitRoot === "repo") {
-      const setup = await ask(rl, "是否统一创建 5 个编码角色 worktree？(Y/n)", "Y");
+    if (!TEAM_PROFILES[options.teamProfile]) options.teamProfile = "full-7";
+    if (!STARTUP_MODES[options.startupMode]) options.startupMode = "discovery-first";
+    if (!["workspace", "repo", "none"].includes(options.gitRoot)) options.gitRoot = "workspace";
+    // delivery-ready 或旧 repo 模式下可创建 worktree
+    if ((options.startupMode === "delivery-ready" || options.gitRoot === "repo") && options.setupWorktrees) {
+      const setup = await ask(rl, "是否统一创建编码角色 worktree？(Y/n)", "Y");
       options.setupWorktrees = !setup.trim().toLowerCase().startsWith("n");
       if (options.setupWorktrees) {
         const testCommits = await ask(rl, "是否为每个角色创建身份就绪测试提交？(y/N)", "N");
@@ -573,7 +916,7 @@ async function completeOptions(options) {
       options.roleTestCommits = false;
     }
 
-    const summaryRoles = buildRoles(options.preset, options.roleOverrides, options.emailOverrides, options.sprintNumber);
+    const summaryRoles = buildRoles(options.preset, options.roleOverrides, options.emailOverrides, options.sprintNumber, options.teamProfile);
     validateOptions(options);
     validateRoles(summaryRoles, options.pushRemote);
     console.log("\n=== 即将创建的工作区 ===");
@@ -582,7 +925,8 @@ async function completeOptions(options) {
     console.log(`仓库策略：${REPO_STRATEGIES[options.repoStrategy]}`);
     console.log(`来源仓库：${options.sourceRepo || "无 / 待确认"}`);
     console.log(`代码仓库：${options.repoName || `${slug(options.projectName)}-app`}`);
-    console.log(`Git 模式：${options.gitRoot}`);
+    console.log(`Git 模式：${options.gitRoot}（启动模式：${options.startupMode}）`);
+    console.log(`团队档位：${TEAM_PROFILES[options.teamProfile]?.label || options.teamProfile}`);
     console.log(`首次签核：${options.initialSignoff}（${options.initialSignoffDue}）`);
     console.log(`角色工作区：${options.setupWorktrees ? "统一创建" : "不创建"}`);
     console.log(`角色测试提交：${options.roleTestCommits ? "创建" : "不创建"}`);
@@ -623,18 +967,21 @@ async function askChoice(rl, label, choices, defaultKey) {
   return choices[key] ? key : defaultKey;
 }
 
-function buildRoles(presetKey, overrides, emailOverrides = {}, sprintNumber = 1) {
+function buildRoles(presetKey, overrides, emailOverrides = {}, sprintNumber = 1, teamProfile = "full-7") {
   const preset = ROLE_PRESETS[presetKey] || ROLE_PRESETS.tech;
-  return ROLE_SLOTS.map((slot) => {
-    const name = overrides[slot.id] || preset.names[slot.id];
-    const nameSlug = slug(name, slot.id);
-    const email = emailOverrides[slot.id] || `${DEFAULT_EMAIL_BASE}+${ROLE_EMAIL_TAG[slot.id]}@${DEFAULT_EMAIL_DOMAIN}`;
+  const profile = TEAM_PROFILES[teamProfile] || TEAM_PROFILES["full-7"];
+  return profile.members.map((member) => {
+    const slotId = member.primarySlot;
+    const name = overrides[member.id] || preset.names[slotId] || member.id;
+    const nameSlug = slug(name, member.id);
+    const emailTag = member.id.replace(/-/g, "_");
+    const email = emailOverrides[member.id] || `${DEFAULT_EMAIL_BASE}+${emailTag}@${DEFAULT_EMAIL_DOMAIN}`;
     return {
-      ...slot,
+      ...member,
       name,
-      dirName: `${safePathSegment(name, slot.id)}_${slot.roleCode}`,
-      branchName: slot.worktree
-        ? `feature/sprint-${sprintNumber}/initial-work-${nameSlug}-${slot.branchRole}`
+      dirName: `${safePathSegment(name, member.id)}_${member.id.replace(/-/g, "_")}`,
+      branchName: member.worktree
+        ? `feature/sprint-${sprintNumber}/initial-work-${nameSlug}-${member.branchRole}`
         : "",
       email,
     };
@@ -674,14 +1021,22 @@ function validateOptions(options) {
   if (options.pushRemote && !options.remoteUrl) {
     throw new Error("--push 必须与 --remote=<url> 一起使用。");
   }
-  if (options.repoStrategy === "reuse" && options.gitRoot === "repo") {
-    throw new Error("reuse 策略不会初始化或复制现有代码仓；请使用 --git-root=none 或 workspace。");
+  if (options.repoStrategy === "reuse" && (options.gitRoot === "repo" || options.startupMode === "delivery-ready")) {
+    throw new Error("reuse 策略不会初始化或复制现有代码仓；请使用 --git-root=none 或 workspace，或 --startup-mode=discovery-first。");
   }
-  if (options.setupWorktrees && options.gitRoot !== "repo") {
-    throw new Error("自动角色 worktree 仅支持 --git-root=repo；请改用独立代码仓模式或加 --no-worktrees。");
+  // v1.1.0: delivery-ready 双仓模式下也允许 worktree（gitRoot=workspace + 独立代码仓）
+  if (options.setupWorktrees && options.gitRoot !== "repo" && options.startupMode !== "delivery-ready") {
+    throw new Error("自动角色 worktree 仅支持 --git-root=repo 或 --startup-mode=delivery-ready；请改用 --no-worktrees。");
   }
   if (options.roleTestCommits && !options.setupWorktrees) {
     throw new Error("--role-test-commits 需要启用角色 worktree。");
+  }
+  // v1.1.0: team-profile 和 startup-mode 合法性校验
+  if (options.teamProfile && !TEAM_PROFILES[options.teamProfile]) {
+    throw new Error(`--team-profile 值非法：${options.teamProfile}。可用值：${Object.keys(TEAM_PROFILES).join(", ")}`);
+  }
+  if (options.startupMode && !STARTUP_MODES[options.startupMode]) {
+    throw new Error(`--startup-mode 值非法：${options.startupMode}。可用值：${Object.keys(STARTUP_MODES).join(", ")}`);
   }
 }
 
@@ -748,24 +1103,19 @@ function renderRepoInventory(options, repoName) {
   return `| R01 | ${target} | 新项目主仓 | 新建 | ${baseline} | 待技术选型 | 准备中 | ${sprint} | FS |`;
 }
 
-function roleStatusFor(id, teamStage) {
-  // RC3 分阶段团队：core 档只激活能开展发现与决策的核心专家；
-  // 交付成员在 Sprint 0 明确模块后再激活。full 档全员 active（兼容）。
-  if (teamStage !== "core") return "active";
-  if (["po", "sm", "tl"].includes(id)) return "active";
-  if (id === "srfe") return "optional";
-  return "planned";
-}
+// v1.1.0: roleStatusFor 已移除，状态直接在 TEAM_PROFILES member.status 中
 
 function buildReplacements(options, roles) {
   const preset = ROLE_PRESETS[options.preset] || ROLE_PRESETS.tech;
+  const profile = TEAM_PROFILES[options.teamProfile] || TEAM_PROFILES["full-7"];
   const projectName = options.projectName;
   const repoName = options.repoName || `${slug(projectName)}-app`;
   const today = new Date().toISOString().slice(0, 10);
   const worktreeRoles = roles.filter((role) => role.worktree);
   const sourceRepo = safeRemoteUrl(options.sourceRepo) || "待确认";
   const isReuse = options.repoStrategy === "reuse";
-  const codeRepoNow = options.gitRoot === "repo";
+  // delivery-ready 双仓模式或旧 --git-root=repo 都意味着代码仓已创建
+  const codeRepoNow = options.gitRoot === "repo" || options.startupMode === "delivery-ready";
   const repoWorkspaceLocation = codeRepoNow
     ? `10_代码仓库/${repoName}/`
     : isReuse
@@ -777,6 +1127,54 @@ function buildReplacements(options, roles) {
     rewrite: "旧仓保持可维护，新仓验证新技术栈；达到切换门禁前不得替换生产主仓",
     create: "完成技术选型、代码骨架、CI 和首个可运行增量",
   }[options.repoStrategy];
+
+  // v2 member-hat-v1 格式生成
+  const members = roles.map((role) => ({
+    id: role.id,
+    name: role.name,
+    email: role.email,
+    status: role.status,
+  }));
+  const scrum = profile.scrum;
+  const hats = {};
+  const assignments = [];
+  for (const member of profile.members) {
+    for (const hatId of member.hatIds || []) {
+      if (!hats[hatId]) {
+        const label = HAT_LABELS_MAP[hatId] || hatId;
+        hats[hatId] = { label };
+      }
+      assignments.push({
+        memberId: member.id,
+        hatId,
+        kind: "primary",
+        status: member.status === "active" ? "active" : member.status,
+      });
+    }
+  }
+  const worktreeRecords = worktreeRoles.map((role) => ({
+    memberId: role.id,
+    dirName: role.dirName,
+    branchName: role.branchName,
+  }));
+
+  // 从 scrum 查找 PO/SM/TL 名称
+  const poName = roles.find((r) => r.id === scrum.productOwner)?.name ?? scrum.productOwner;
+  const smName = roles.find((r) => r.id === scrum.scrumMaster)?.name ?? scrum.scrumMaster;
+  const tlId = scrum.developers.find((id) => profile.members.find((m) => m.id === id)?.hatIds?.includes("tl")) || scrum.developers[0];
+  const tlName = roles.find((r) => r.id === tlId)?.name ?? tlId;
+  // FS 执行人：从 hat 找，不找固定 memberId
+  const fsMemberId = profile.members.find((m) => m.hatIds?.includes("fs"))?.id || "fs";
+  const fsName = roles.find((r) => r.id === fsMemberId)?.name ?? fsMemberId;
+  // 后端执行人
+  const beMemberId = profile.members.find((m) => m.hatIds?.includes("backend"))?.id || "midbe";
+  const beName = roles.find((r) => r.id === beMemberId)?.name ?? beMemberId;
+  // 前端执行人
+  const feMemberId = profile.members.find((m) => m.hatIds?.includes("frontend"))?.id || "srfe";
+  const feName = roles.find((r) => r.id === feMemberId)?.name ?? feMemberId;
+  // QA 执行人
+  const qaMemberId = profile.members.find((m) => m.hatIds?.includes("qa"))?.id || "midfe";
+  const qaName = roles.find((r) => r.id === qaMemberId)?.name ?? qaMemberId;
 
   return {
     PROJECT_NAME: projectName,
@@ -799,6 +1197,10 @@ function buildReplacements(options, roles) {
     REPO_NAME: repoName,
     ROLE_PRESET: options.preset,
     ROLE_PRESET_LABEL: preset.label,
+    TEAM_PROFILE: options.teamProfile,
+    TEAM_PROFILE_LABEL: profile.label,
+    STARTUP_MODE: options.startupMode,
+    STARTUP_MODE_LABEL: (STARTUP_MODES[options.startupMode]?.label) || options.startupMode,
     TOOL_VERSION: CLI_VERSION,
     CREATED_DATE: today,
     SPRINT_NUMBER: String(options.sprintNumber),
@@ -826,13 +1228,13 @@ function buildReplacements(options, roles) {
       : isReuse
         ? "确认仓库权限、基线分支和角色工作区"
         : "创建 Git 仓库和角色 worktree",
-    ROLE_PO_NAME: roleNameById(roles, "po"),
-    ROLE_SM_NAME: roleNameById(roles, "sm"),
-    ROLE_TL_NAME: roleNameById(roles, "tl"),
-    ROLE_MIDBE_NAME: roleNameById(roles, "midbe"),
-    ROLE_SRFE_NAME: roleNameById(roles, "srfe"),
-    ROLE_MIDFE_NAME: roleNameById(roles, "midfe"),
-    ROLE_FS_NAME: roleNameById(roles, "fs"),
+    ROLE_PO_NAME: poName,
+    ROLE_SM_NAME: smName,
+    ROLE_TL_NAME: tlName,
+    ROLE_MIDBE_NAME: beName,
+    ROLE_SRFE_NAME: feName,
+    ROLE_MIDFE_NAME: qaName,
+    ROLE_FS_NAME: fsName,
     ROLE_TABLE: renderRoleTable(roles),
     ROLE_CARDS: renderRoleCards(roles),
     ABILITY_MATRIX: renderAbilityMatrix(roles),
@@ -849,9 +1251,16 @@ function buildReplacements(options, roles) {
           `git -C TeamWork/${role.dirName} config --worktree user.name "${role.name}"\ngit -C TeamWork/${role.dirName} config --worktree user.email "${role.email}"`,
       )
       .join("\n\n"),
-    SPRINT0_ASSIGNMENTS: renderSprint0Assignments(roles),
+    SPRINT0_ASSIGNMENTS: renderSprint0Assignments(roles, profile),
+    // v2 member-hat-v1 格式：members/scrum/hats/assignments + teamProfile/startupMode
+    // worktrees 为派生记录，不作为团队事实源
     ROLE_JSON: JSON.stringify(
       {
+        schemaVersion: 2,
+        model: "member-hat-v1",
+        teamProfile: options.teamProfile,
+        teamStage: options.teamStage || options.teamProfile, // 兼容旧字段
+        startupMode: options.startupMode,
         projectName,
         repoName,
         type: options.type,
@@ -859,7 +1268,6 @@ function buildReplacements(options, roles) {
         sourceRepo: safeRemoteUrl(options.sourceRepo),
         preset: options.preset,
         gitRoot: options.gitRoot,
-        teamStage: options.teamStage,
         setupWorktrees: options.setupWorktrees,
         roleTestCommits: options.roleTestCommits,
         remoteUrl: safeRemoteUrl(options.remoteUrl),
@@ -868,21 +1276,28 @@ function buildReplacements(options, roles) {
         sprintNumber: options.sprintNumber,
         initialSignoff: options.initialSignoff,
         initialSignoffDue: options.initialSignoffDue,
+        members,
+        scrum,
+        hats,
+        assignments,
+        // worktrees 为派生记录：创建时生成，团队事实不从 worktrees 反推
+        worktrees: worktreeRecords,
+        // 兼容字段：保留 roles/emails/roleDetails 供旧工具读取
         roles: Object.fromEntries(roles.map((role) => [role.id, role.name])),
         emails: Object.fromEntries(roles.map((role) => [role.id, role.email])),
-        roleDetails: roles.map(({ id, name, email, roleCode, title, hats, skills, backup, worktree, dirName, branchName }) => ({
+        roleDetails: roles.map(({ id, name, email, roleCode, title, hats: roleHats, skills, backup, worktree, dirName, branchName, status }) => ({
           id,
           name,
           email,
           roleCode,
           title,
-          hats,
+          hats: roleHats,
           skills,
           backup,
           worktree,
           dirName,
           branchName,
-          status: roleStatusFor(id, options.teamStage),
+          status,
         })),
       },
       null,
@@ -905,9 +1320,9 @@ function renderPresetOptions() {
 
 function renderRoleTable(roles) {
   return [
-    "| 槽位 | 名称 | 邮箱 | 主身份 | 兼任帽子 | 编码工作区 | 备份机制 |",
-    "| --- | --- | --- | --- | --- | --- | --- |",
-    ...roles.map((role) => `| ${role.id} | ${role.name} | ${role.email} | ${role.title} | ${role.hats} | ${role.worktree ? role.dirName : "不创建"} | ${role.backup} |`),
+    "| 成员 | 名称 | 邮箱 | 主身份 | 兼任帽子 | 状态 | 编码工作区 | 备份机制 |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- |",
+    ...roles.map((role) => `| ${role.id} | ${role.name} | ${role.email} | ${role.title} | ${role.hats} | ${role.status} | ${role.worktree ? role.dirName : "不创建"} | ${role.backup} |`),
   ].join("\n");
 }
 
@@ -932,19 +1347,17 @@ ${role.soul}
 }
 
 function renderAbilityMatrix(roles) {
-  const score = {
-    po: ["·", "·", "·", "·", "·", "·", "○"],
-    sm: ["·", "·", "·", "·", "·", "·", "·"],
-    tl: ["◎", "·", "○", "○", "○", "◎", "·"],
-    midbe: ["◎", "·", "·", "◎", "·", "○", "·"],
-    srfe: ["·", "◎", "○", "○", "·", "·", "◎"],
-    midfe: ["·", "◎", "·", "◎", "·", "·", "○"],
-    fs: ["○", "○", "◎", "○", "◎", "○", "·"],
-  };
+  // v1.1.0: 从 hatIds 动态生成能力矩阵，不再硬编码 slot ID
+  const columns = ["backend", "frontend", "fs", "qa", "devops", "architecture", "ux"];
+  const columnLabels = ["BE", "FE", "FS", "QA", "DevOps", "架构", "UX/UI"];
   return [
-    "| 成员 | BE | FE | FS | QA | DevOps | 架构 | UX/UI | 帽子 |",
-    "| --- | :-: | :-: | :-: | :-: | :-: | :-: | :-: | --- |",
-    ...roles.map((role) => `| ${role.name} | ${(score[role.id] || []).join(" | ")} | ${role.hats} |`),
+    `| 成员 | ${columnLabels.join(" | ")} | 帽子 |`,
+    `| --- | ${columnLabels.map(() => ":-:").join(" | ")} | --- |`,
+    ...roles.map((role) => {
+      const hatIds = role.hatIds || [];
+      const cells = columns.map((col) => hatIds.includes(col) ? "◎" : "·");
+      return `| ${role.name} | ${cells.join(" | ")} | ${role.hats} |`;
+    }),
   ].join("\n");
 }
 
@@ -956,8 +1369,27 @@ function renderBackupTable(roles) {
   ].join("\n");
 }
 
+function findMemberByScrumRole(profile, roles, scrumRole) {
+  const id = profile.scrum[scrumRole];
+  if (!id) return null;
+  return roles.find((r) => r.id === id);
+}
+
+function findMemberByHat(profile, roles, hatId) {
+  const member = profile.members.find((m) => m.hatIds?.includes(hatId));
+  if (!member) return null;
+  return roles.find((r) => r.id === member.id);
+}
+
 function renderTaskExecutionTable(roles, today, options) {
-  const byId = Object.fromEntries(roles.map((role) => [role.id, role]));
+  const profile = TEAM_PROFILES[options.teamProfile] || TEAM_PROFILES["full-7"];
+  const poRole = findMemberByScrumRole(profile, roles, "productOwner");
+  const smRole = findMemberByScrumRole(profile, roles, "scrumMaster");
+  const tlRole = findMemberByHat(profile, roles, "tl") || roles.find((r) => r.id === profile.scrum.developers[0]);
+  const beRole = findMemberByHat(profile, roles, "backend");
+  const feRole = findMemberByHat(profile, roles, "frontend");
+  const qaRole = findMemberByHat(profile, roles, "qa");
+  const fsRole = findMemberByHat(profile, roles, "fs");
   const fsTask = options.repoStrategy === "reuse"
     ? "接入现有代码仓并验证角色工作区"
     : "验证目标代码仓与角色工作区";
@@ -967,49 +1399,49 @@ function renderTaskExecutionTable(roles, today, options) {
   const rows = [
     {
       id: "T01", parent: "Sprint Goal", title: "确认价值目标与首批候选 Story", level: "D 决策",
-      complexity: "M", owner: "po", reviewer: "sm", start: "立即；项目背景已知",
+      complexity: "M", ownerRole: poRole, reviewerRole: smRole, start: "立即；项目背景已知",
       responsibleHat: "po",
       actions: "写清 Sprint Goal；排序候选 Story；为最高优先项补 AC",
       dod: "Goal 可判定；至少 1 个候选 Story 有 AC 和优先级", excludes: "不决定技术实现",
     },
     {
       id: "T02", parent: "Sprint Goal", title: "校准启动节奏、依赖与事实入口", level: "D 流程",
-      complexity: "S", owner: "sm", reviewer: "po", start: "立即；无需等待 T01 完成",
+      complexity: "S", ownerRole: smRole, reviewerRole: poRole, start: "立即；无需等待 T01 完成",
       responsibleHat: "sm",
       actions: "发布启动通知；确认任务 Owner(memberId+responsibleHat)；把新增等待/阻塞登记到唯一任务表",
       dod: "全员知道首个动作、前置和状态更新位置", excludes: "不替 PO/TL/FS 作专业决策",
     },
     {
       id: "T03", parent: "T01", title: "形成技术全景与模块拆分草案", level: "A 架构",
-      complexity: "L", owner: "tl", reviewer: "po", start: "可立即起草；定版等待 T01",
+      complexity: "L", ownerRole: tlRole, reviewerRole: poRole, start: "可立即起草；定版等待 T01",
       responsibleHat: "tl",
       actions: "记录现状/目标架构；划模块边界；标出需 ADR/Spike 的高风险决策",
       dod: "模块可分派；关键风险、接口和待决策项有明确 Owner", excludes: "不包办各模块实现",
     },
     {
       id: "T04", parent: "T03", title: "后端/API/数据切片准备", level: "I/V 准备",
-      complexity: "M", owner: "midbe", reviewer: "tl", start: "等待 T03 给出模块边界；可先列风险",
+      complexity: "M", ownerRole: beRole, reviewerRole: tlRole, start: "等待 T03 给出模块边界；可先列风险",
       responsibleHat: "backend",
       actions: "细化接口与数据候选；补异常场景和测试点；估算可实现切片",
       dod: "首个后端切片具备输入、输出、AC、测试点和复杂度", excludes: "Sprint 0 不默认要求完整编码",
     },
     {
       id: "T05", parent: "T01/T03", title: "体验基线与前端切片准备", level: "A/I 准备",
-      complexity: "M", owner: "srfe", reviewer: "tl", start: "可先做体验草案；定版等待 T01/T03",
-      responsibleHat: "ux",
+      complexity: "M", ownerRole: feRole, reviewerRole: tlRole, start: "可先做体验草案；定版等待 T01/T03",
+      responsibleHat: "frontend",
       actions: "明确关键页面/状态/可访问性约束；给出前端模块和首个切片",
       dod: "关键体验约束可验收；前端切片可交给实现角色", excludes: "不要求完成全部视觉稿",
     },
     {
       id: "T06", parent: "T04/T05", title: "联调与 E2E 验证切片准备", level: "V 验证",
-      complexity: "S", owner: "midfe", reviewer: "srfe", start: "等待 T04/T05 的首个切片",
+      complexity: "S", ownerRole: qaRole, reviewerRole: feRole, start: "等待 T04/T05 的首个切片",
       responsibleHat: "qa",
       actions: "把 AC 转成联调/E2E 场景；确认测试数据、运行入口和证据格式",
       dod: "至少 1 条关键路径可执行、可失败、可留证", excludes: "不为等待中的接口伪造通过证据",
     },
     {
       id: "T07", parent: "工程准入", title: fsTask, level: "O 工程环境",
-      complexity: "S", owner: "fs", reviewer: "tl", start: "立即；仓库策略和角色信息已生成",
+      complexity: "S", ownerRole: fsRole, reviewerRole: tlRole, start: "立即；仓库策略和角色信息已生成",
       responsibleHat: "devops",
       actions: fsActions,
       dod: "仓库清单准确；编码角色知道仓库/分支/工作区；至少完成一次访问验证",
@@ -1020,51 +1452,81 @@ function renderTaskExecutionTable(roles, today, options) {
     "| ID | 父项 | 任务 | 级别 | 复杂度 | Owner（memberId） | 责任帽子 | Reviewer | 可开始条件 | 具体动作 | 完成标准（DoD） | 不包含 | 状态 | 更新 |",
     "| --- | --- | --- | --- | :---: | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ...rows.map((row) =>
-      `| ${row.id} | ${row.parent} | ${row.title} | ${row.level} | ${row.complexity} | ${byId[row.owner].name} (${row.owner}) | ${row.responsibleHat} | ${byId[row.reviewer].name} | ${row.start} | ${row.actions} | ${row.dod} | ${row.excludes} | 未开始 | ${today} |`
+      `| ${row.id} | ${row.parent} | ${row.title} | ${row.level} | ${row.complexity} | ${row.ownerRole?.name || "待定"} (${row.ownerRole?.id || "待定"}) | ${row.responsibleHat} | ${row.reviewerRole?.name || "待定"} | ${row.start} | ${row.actions} | ${row.dod} | ${row.excludes} | 未开始 | ${today} |`
     ),
   ].join("\n");
 }
 
 function renderKickoffNotice(roles, options, repoName) {
-  const byId = Object.fromEntries(roles.map((role) => [role.id, role.name]));
+  const profile = TEAM_PROFILES[options.teamProfile] || TEAM_PROFILES["full-7"];
+  const poRole = findMemberByScrumRole(profile, roles, "productOwner");
+  const smRole = findMemberByScrumRole(profile, roles, "scrumMaster");
+  const tlRole = findMemberByHat(profile, roles, "tl") || roles.find((r) => r.id === profile.scrum.developers[0]);
+  const feRole = findMemberByHat(profile, roles, "frontend");
+  const beRole = findMemberByHat(profile, roles, "backend");
+  const qaRole = findMemberByHat(profile, roles, "qa");
+  const fsRole = findMemberByHat(profile, roles, "fs");
   const repoAction = options.repoStrategy === "reuse"
     ? `接入现有仓库 ${safeRemoteUrl(options.sourceRepo) || "（地址待补）"} 并验证角色工作区`
     : `验证目标仓库 10_代码仓库/${repoName}/ 及角色工作区`;
-  return [
+  const lines = [
     `【项目启动通知｜${options.projectName}｜Sprint 0】`,
     `当前阶段：启动与奠基｜项目类型：${PROJECT_TYPES[options.type]}｜仓库策略：${REPO_STRATEGIES[options.repoStrategy]}`,
     "唯一任务入口：03_迭代运行/Sprint-0-启动/01_Sprint任务表与流程看板.md §4",
     "",
     "现在可并行：",
-    `@${byId.po} (po)｜T01｜确认 Sprint Goal、首批 Story 与 AC｜完成：至少 1 个候选 Story 可判定验收`,
-    `@${byId.sm} (sm)｜T02｜确认全员首个动作、依赖和状态入口｜完成：启动通知已发、Owner(memberId+responsibleHat) 已确认`,
-    `@${byId.tl} (tl)｜T03｜起草技术全景与模块边界｜定版等待 T01；完成：模块可分派、风险有 Owner`,
-    `@${byId.srfe} (srfe)｜T05｜先做体验/前端切片草案｜定版等待 T01/T03`,
-    `@${byId.fs} (fs)｜T07｜${repoAction}｜完成：仓库/分支/身份/访问验证可复查`,
-    "",
-    "等待输入，但可先准备：",
-    `@${byId.midbe} (midbe)｜T04｜等待 T03 模块边界；先列 API/数据风险和测试点`,
-    `@${byId.midfe} (midfe)｜T06｜等待 T04/T05 首个切片；先准备联调/E2E 检查清单`,
+    `@${poRole?.name || "PO"} (${poRole?.id || "po"})｜T01｜确认 Sprint Goal、首批 Story 与 AC｜完成：至少 1 个候选 Story 可判定验收`,
+    `@${smRole?.name || "SM"} (${smRole?.id || "sm"})｜T02｜确认全员首个动作、依赖和状态入口｜完成：启动通知已发、Owner(memberId+responsibleHat) 已确认`,
+    `@${tlRole?.name || "TL"} (${tlRole?.id || "tl"})｜T03｜起草技术全景与模块边界｜定版等待 T01；完成：模块可分派、风险有 Owner`,
+  ];
+  if (feRole) {
+    lines.push(`@${feRole.name} (${feRole.id})｜T05｜先做体验/前端切片草案｜定版等待 T01/T03`);
+  }
+  if (fsRole) {
+    lines.push(`@${fsRole.name} (${fsRole.id})｜T07｜${repoAction}｜完成：仓库/分支/身份/访问验证可复查`);
+  }
+  lines.push("", "等待输入，但可先准备：");
+  if (beRole) {
+    lines.push(`@${beRole.name} (${beRole.id})｜T04｜等待 T03 模块边界；先列 API/数据风险和测试点`);
+  }
+  if (qaRole && qaRole.id !== beRole?.id) {
+    lines.push(`@${qaRole.name} (${qaRole.id})｜T06｜等待 T04/T05 首个切片；先准备联调/E2E 检查清单`);
+  }
+  lines.push(
     "",
     "明确不做：FS 本轮不默认新建 CI、部署或发布流水线；仅在技术栈、构建方式或平台变化时另建任务。",
     "状态更新：本人只更新任务行的状态、证据和时间；新增等待/阻塞时 @SM。",
     "签核另行处理：收到【签核通知】后，每人只运行 Notice 中本人完整命令；启动通知不等于签核通知。",
-  ].join("\n");
+  );
+  return lines.join("\n");
 }
 
-function renderSprint0Assignments(roles) {
-  const byId = Object.fromEntries(roles.map((role) => [role.id, role.name]));
+function renderSprint0Assignments(roles, profile) {
+  const poRole = findMemberByScrumRole(profile, roles, "productOwner");
+  const smRole = findMemberByScrumRole(profile, roles, "scrumMaster");
+  const tlRole = findMemberByHat(profile, roles, "tl") || roles.find((r) => r.id === profile.scrum.developers[0]);
+  const beRole = findMemberByHat(profile, roles, "backend");
+  const feRole = findMemberByHat(profile, roles, "frontend");
+  const qaRole = findMemberByHat(profile, roles, "qa");
+  const fsRole = findMemberByHat(profile, roles, "fs");
+  const poName = poRole?.name || "PO";
+  const smName = smRole?.name || "SM";
+  const tlName = tlRole?.name || "TL";
+  const beName = beRole?.name || "待定";
+  const feName = feRole?.name || "待定";
+  const qaName = qaRole?.name || "待定";
+  const fsName = fsRole?.name || "FS";
   return [
     "| 工作项 | 主责 | 协作 | 输出 |",
     "| --- | --- | --- | --- |",
-    `| 产品愿景与首批 Backlog | ${byId.po} | ${byId.sm}, 全员 | 01_产品发现 / 02_产品待办 |`,
-    `| 团队协议与节奏 | ${byId.sm} | 全员 | 00_项目导航 / 03_迭代运行 |`,
-    `| 架构草案与 ADR 候选 | ${byId.tl} | ${byId.fs}, ${byId.midbe} | 04_工程设计 |`,
-    `| 后端/API/数据模型初评 | ${byId.tl} | ${byId.midbe} | 04_工程设计/02_API契约 / 03_数据模型 |`,
-    `| 前端体验与设计系统初评 | ${byId.srfe} | ${byId.midfe} | 04_工程设计/04_前端设计系统 |`,
-    `| 测试策略与质量门禁 | ${byId.midbe}, ${byId.midfe} | ${byId.tl} | 05_质量验证 |`,
-    `| 代码仓库接入与角色工作区验证 | ${byId.fs} | ${byId.tl}, 编码角色 | 仓库清单 / 分支与访问验证 |`,
-    `| CI/CD 变化评估（条件触发） | 未分配 | ${byId.fs}, ${byId.tl} | 仅技术栈/构建/平台变化时建立 Task |`,
+    `| 产品愿景与首批 Backlog | ${poName} | ${smName}, 全员 | 01_产品发现 / 02_产品待办 |`,
+    `| 团队协议与节奏 | ${smName} | 全员 | 00_项目导航 / 03_迭代运行 |`,
+    `| 架构草案与 ADR 候选 | ${tlName} | ${fsName}, ${beName} | 04_工程设计 |`,
+    `| 后端/API/数据模型初评 | ${tlName} | ${beName} | 04_工程设计/02_API契约 / 03_数据模型 |`,
+    `| 前端体验与设计系统初评 | ${feName} | ${qaName} | 04_工程设计/04_前端设计系统 |`,
+    `| 测试策略与质量门禁 | ${beName}, ${qaName} | ${tlName} | 05_质量验证 |`,
+    `| 代码仓库接入与角色工作区验证 | ${fsName} | ${tlName}, 编码角色 | 仓库清单 / 分支与访问验证 |`,
+    `| CI/CD 变化评估（条件触发） | 未分配 | ${fsName}, ${tlName} | 仅技术栈/构建/平台变化时建立 Task |`,
   ].join("\n");
 }
 
@@ -1106,7 +1568,9 @@ function collectTemplatePlan(src, dest, replacements, plan) {
 }
 
 function filterTemplatePlan(plan, target, replacements, options) {
+  // 旧 --git-root=repo 模式：所有文件在一个 Git 里，不过滤
   if (options.gitRoot === "repo") return plan;
+  // delivery-ready 双仓模式：代码仓目录由 setupGitWorkspace 独立处理，从模板计划中排除
   const repoRoot = path.resolve(target, "10_代码仓库", replacements.REPO_NAME);
   return plan.filter((item) => {
     const candidate = path.resolve(item.dest);
@@ -1158,14 +1622,152 @@ function commitEnvironment(role) {
 }
 
 function setupGitWorkspace(target, options, repoName, roles) {
-  if (options.gitRoot === "none") return { gitTarget: "", worktrees: [] };
+  if (options.gitRoot === "none") return { gitTarget: "", worktrees: [], codeRepoTarget: "" };
 
-  const gitTarget = options.gitRoot === "repo"
-    ? path.join(target, "10_代码仓库", repoName)
-    : target;
-  const fsRole = roles.find((role) => role.id === "fs");
+  const profile = TEAM_PROFILES[options.teamProfile] || TEAM_PROFILES["full-7"];
+  // FS 执行人：从 hat 找，不找固定 memberId
+  const fsMember = profile.members.find((m) => m.hatIds?.includes("fs"));
+  const fsRole = (fsMember && roles.find((r) => r.id === fsMember.id)) || roles[0];
   const sprintBranch = `sprint-${options.sprintNumber}`;
+  const isDeliveryReady = options.startupMode === "delivery-ready";
+  const isOldRepoMode = options.gitRoot === "repo";
 
+  // ── 旧模式：--git-root=repo（所有文件在一个 Git 里） ──
+  if (isOldRepoMode && !isDeliveryReady) {
+    const gitTarget = path.join(target, "10_代码仓库", repoName);
+    return setupSingleRepoGit(gitTarget, options, roles, fsRole, sprintBranch, repoName, target);
+  }
+
+  // ── delivery-ready 双仓模式 或 discovery-first workspace 模式 ──
+  // 步骤 1: 文档治理仓 Git init（项目根目录）
+  const gitTarget = target;
+  runGit(gitTarget, ["init", "-b", options.defaultBranch]);
+
+  // .gitignore 追加代码仓目录（delivery-ready 模式）
+  if (isDeliveryReady) {
+    const gitignorePath = path.join(gitTarget, ".gitignore");
+    const codeRepoEntry = `10_代码仓库/${repoName}/`;
+    let gitignoreContent = "";
+    if (fs.existsSync(gitignorePath)) {
+      gitignoreContent = fs.readFileSync(gitignorePath, "utf8");
+    }
+    // 检查是否已有非注释的活跃规则（模板中可能有 # 10_代码仓库/repoName/ 注释行）
+    const hasActiveEntry = gitignoreContent.split("\n").some((line) => line.trim() === codeRepoEntry);
+    if (!hasActiveEntry) {
+      gitignoreContent = gitignoreContent.trimEnd() + "\n" + codeRepoEntry + "\n";
+      fs.writeFileSync(gitignorePath, gitignoreContent, "utf8");
+    }
+  }
+
+  runGit(gitTarget, ["add", "."]);
+  const commit = runGit(
+    gitTarget,
+    ["commit", "-m", "chore: initialize scrum team workspace"],
+    { env: commitEnvironment(fsRole), allowFailure: true },
+  );
+  const hasHead = runGit(gitTarget, ["rev-parse", "--verify", "HEAD"], { allowFailure: true }).status === 0;
+  if (!hasHead) {
+    const detail = (commit.stderr || commit.stdout || "").trim();
+    throw new Error(`Git 首次提交失败。${detail ? `\n${detail}` : ""}`);
+  }
+
+  runGit(gitTarget, ["config", "extensions.worktreeConfig", "true"]);
+  runGit(gitTarget, ["config", "--worktree", "user.name", fsRole.name]);
+  runGit(gitTarget, ["config", "--worktree", "user.email", fsRole.email]);
+
+  // 文档仓 sprint 分支
+  const sprintExists = runGit(gitTarget, ["show-ref", "--verify", "--quiet", `refs/heads/${sprintBranch}`], {
+    allowFailure: true,
+  }).status === 0;
+  if (!sprintExists) runGit(gitTarget, ["branch", sprintBranch, options.defaultBranch]);
+
+  if (options.remoteUrl) {
+    const currentRemote = runGit(gitTarget, ["remote", "get-url", "origin"], { allowFailure: true });
+    if (currentRemote.status === 0 && currentRemote.stdout.trim() !== options.remoteUrl) {
+      throw new Error(`origin 已存在且地址不同：${currentRemote.stdout.trim()}`);
+    }
+    if (currentRemote.status !== 0) runGit(gitTarget, ["remote", "add", "origin", options.remoteUrl]);
+  }
+
+  const worktrees = [];
+  let codeRepoTarget = "";
+
+  // ── delivery-ready: 独立代码仓 Git init + worktree ──
+  if (isDeliveryReady && options.setupWorktrees) {
+    codeRepoTarget = path.join(target, "10_代码仓库", repoName);
+    fs.mkdirSync(codeRepoTarget, { recursive: true });
+
+    // 步骤 3: 独立代码仓 Git init
+    runGit(codeRepoTarget, ["init", "-b", options.defaultBranch]);
+    runGit(codeRepoTarget, ["config", "extensions.worktreeConfig", "true"]);
+    runGit(codeRepoTarget, ["config", "--worktree", "user.name", fsRole.name]);
+    runGit(codeRepoTarget, ["config", "--worktree", "user.email", fsRole.email]);
+
+    // 步骤 4: 代码仓创建 sprint 分支
+    // 代码仓需要一个初始提交才能创建分支
+    const readmePath = path.join(codeRepoTarget, "README.md");
+    fs.writeFileSync(readmePath, `# ${repoName}\n\n代码仓库（独立 Git）\n`, "utf8");
+    runGit(codeRepoTarget, ["add", "."]);
+    const codeCommit = runGit(
+      codeRepoTarget,
+      ["commit", "-m", "chore: initialize code repository"],
+      { env: commitEnvironment(fsRole), allowFailure: true },
+    );
+    const codeHasHead = runGit(codeRepoTarget, ["rev-parse", "--verify", "HEAD"], { allowFailure: true }).status === 0;
+    if (!codeHasHead) {
+      const detail = (codeCommit.stderr || codeCommit.stdout || "").trim();
+      throw new Error(`代码仓首次提交失败。${detail ? `\n${detail}` : ""}`);
+    }
+
+    const codeSprintExists = runGit(codeRepoTarget, ["show-ref", "--verify", "--quiet", `refs/heads/${sprintBranch}`], {
+      allowFailure: true,
+    }).status === 0;
+    if (!codeSprintExists) runGit(codeRepoTarget, ["branch", sprintBranch, options.defaultBranch]);
+
+    // 步骤 5: 代码仓创建成员 worktree
+    const teamworkDir = path.join(codeRepoTarget, "TeamWork");
+    fs.mkdirSync(teamworkDir, { recursive: true });
+    for (const role of roles.filter((item) => item.worktree)) {
+      const worktreePath = path.join(teamworkDir, role.dirName);
+      if (fs.existsSync(worktreePath)) {
+        throw new Error(`角色工作区已存在，拒绝覆盖：${worktreePath}`);
+      }
+      runGit(codeRepoTarget, ["worktree", "add", worktreePath, "-b", role.branchName, sprintBranch]);
+      runGit(worktreePath, ["config", "--worktree", "user.name", role.name]);
+      runGit(worktreePath, ["config", "--worktree", "user.email", role.email]);
+
+      if (options.roleTestCommits) {
+        const readinessDir = path.join(worktreePath, ".team", "readiness");
+        fs.mkdirSync(readinessDir, { recursive: true });
+        const readinessFile = path.join(readinessDir, `${role.id}.md`);
+        fs.writeFileSync(
+          readinessFile,
+          `# ${role.name} workspace readiness\n\n- Role: ${role.title}\n- Branch: ${role.branchName}\n- Git email: ${role.email}\n- Generated: ${new Date().toISOString()}\n`,
+          "utf8",
+        );
+        runGit(worktreePath, ["add", `.team/readiness/${role.id}.md`]);
+        runGit(worktreePath, ["commit", "-m", `test(team): verify ${role.id} workspace identity`]);
+      }
+      worktrees.push({ role, path: worktreePath });
+    }
+  }
+
+  // ── 旧 --git-root=repo 模式的 worktree ──
+  if (isOldRepoMode && options.setupWorktrees) {
+    // 已在 setupSingleRepoGit 中处理
+    return setupSingleRepoGit(path.join(target, "10_代码仓库", repoName), options, roles, fsRole, sprintBranch, repoName, target);
+  }
+
+  if (options.pushRemote && options.remoteUrl) {
+    const branches = [options.defaultBranch, sprintBranch, ...worktrees.map(({ role }) => role.branchName)];
+    runGit(gitTarget, ["push", "-u", "origin", ...branches]);
+  }
+
+  return { gitTarget, worktrees, sprintBranch, codeRepoTarget };
+}
+
+// 旧 --git-root=repo 模式：所有文件在一个 Git 里
+function setupSingleRepoGit(gitTarget, options, roles, fsRole, sprintBranch, repoName, target) {
   runGit(gitTarget, ["init", "-b", options.defaultBranch]);
   runGit(gitTarget, ["add", "."]);
   const commit = runGit(
@@ -1197,7 +1799,7 @@ function setupGitWorkspace(target, options, repoName, roles) {
   }
 
   const worktrees = [];
-  if (options.setupWorktrees && options.gitRoot === "repo") {
+  if (options.setupWorktrees) {
     const teamworkDir = path.join(gitTarget, "TeamWork");
     fs.mkdirSync(teamworkDir, { recursive: true });
     for (const role of roles.filter((item) => item.worktree)) {
@@ -1225,12 +1827,12 @@ function setupGitWorkspace(target, options, repoName, roles) {
     }
   }
 
-  if (options.pushRemote) {
+  if (options.pushRemote && options.remoteUrl) {
     const branches = [options.defaultBranch, sprintBranch, ...worktrees.map(({ role }) => role.branchName)];
     runGit(gitTarget, ["push", "-u", "origin", ...branches]);
   }
 
-  return { gitTarget, worktrees, sprintBranch };
+  return { gitTarget, worktrees, sprintBranch, codeRepoTarget: "" };
 }
 
 function findPython() {
@@ -1248,10 +1850,12 @@ function findPython() {
 
 function setupInitialSignoff(target, options, roles, gitResult) {
   if (options.initialSignoff === "off") return { state: "off", reason: "已由创建者关闭" };
-  // RC3：首签只覆盖 active 核心角色；planned/optional 成员的占位邮箱不阻塞核心首签。
-  const activeRoles = roles.filter((role) => roleStatusFor(role.id, options.teamStage) === "active");
+  // v1.1.0: 首签只覆盖 active 成员（状态直接在 member.status 中）
+  const activeRoles = roles.filter((role) => role.status === "active");
   const placeholderRoles = activeRoles.filter((role) => PLACEHOLDER_EMAIL_RE.test(role.email));
   const python = findPython();
+  // delivery-ready 模式下 gitRoot 仍为 workspace，首签在文档仓运行
+  // 旧 --git-root=repo 模式不自动首签（项目根不是 Git 仓）
   const eligible = options.initialSignoff === "auto"
     && options.gitRoot === "workspace"
     && Boolean(gitResult.gitTarget)
@@ -1293,11 +1897,16 @@ function printHelp() {
   --type=new|legacy|product|prototype
   --repo-strategy=reuse|import|rewrite|create
   --source-repo=<url-or-path>   现有/来源仓库，仅登记并用于迁移决策
-  --preset=tech|myth|wuxia|compass|studio|greek
+  --startup-mode=discovery-first|delivery-ready
+                                 启动模式：先探索（仅文档仓）或直接交付（双仓+worktree）
+  --team-profile=full-7|core|balanced-5|lean-3|lean-2
+                                 团队档位：5 档预设
+  --name-preset=tech|myth|wuxia|compass|studio|greek
+                                 成员名称风格（兼容 --preset）
   --repo=<repo-name>
-  --role.<slot>=<name>           槽位: po|sm|tl|midbe|srfe|midfe|fs
-  --email.<slot>=<email>         为某角色配置真实邮箱
-  --worktrees | --no-worktrees  是否创建 5 个编码角色 worktree（repo 模式默认创建）
+  --role.<memberId>=<name>       指定成员名称
+  --email.<memberId>=<email>     为某成员配置真实邮箱
+  --worktrees | --no-worktrees  是否创建编码角色 worktree
   --role-test-commits           每个角色分支创建一条身份就绪测试提交
   --remote=<url>                配置代码仓库 origin，不会自动推送
   --push | --no-push            是否将 main、sprint 和角色分支推送到 origin
@@ -1310,13 +1919,20 @@ function printHelp() {
   --interactive | -i             交互式创建（含摘要确认）
   --dry-run | -n                 仅预览将创建的文件，不写入磁盘
   --list-presets
-  --git-root=repo|workspace|none（默认 repo）
+  --git-root=repo|workspace|none（兼容旧参数；默认 workspace）
   --no-git
   --force                        允许写入非空目录
 
+兼容参数:
+  --team-stage=core|full        → --team-profile=core|full-7
+  --preset=<style>              → --name-preset=<style>
+  --code-repo=now|defer          → --startup-mode=delivery-ready|discovery-first
+
 示例:
+  node index.mjs acme-ark --startup-mode=delivery-ready --team-profile=balanced-5
+  node index.mjs acme-ark --startup-mode=delivery-ready --team-profile=lean-3 --name-preset=studio
+  node index.mjs acme-ark --startup-mode=discovery-first --team-profile=core
   node index.mjs acme-ark --type=product --repo-strategy=reuse --source-repo=https://example.com/acme.git
-  node index.mjs acme-next --type=legacy --repo-strategy=rewrite --source-repo=https://example.com/acme.git
   node index.mjs acme-ark --remote=git@github.com:acme/ark.git --role-test-commits --push
   node index.mjs acme-ark --config=./scrum.config.json --dry-run
 
@@ -1327,8 +1943,9 @@ function printHelp() {
     "type": "new",
     "repoStrategy": "create",
     "sourceRepo": "",
-    "preset": "tech",
-    "gitRoot": "repo",
+    "startupMode": "delivery-ready",
+    "teamProfile": "lean-3",
+    "namePreset": "tech",
     "setupWorktrees": true,
     "roleTestCommits": false,
     "remoteUrl": "git@github.com:acme/acme-ark-app.git",
@@ -1337,8 +1954,8 @@ function printHelp() {
     "sprintNumber": 1,
     "initialSignoff": "auto",
     "initialSignoffDue": "+72h",
-    "roles": { "midfe": "Aurora" },
-    "emails": { "po": "po@example.com" }
+    "roles": { "tech-builder": "Forge" },
+    "emails": { "product-coach": "po@example.com" }
   }
 `);
 }
@@ -1359,6 +1976,7 @@ async function main() {
     process.exit(0);
   }
   loadConfigFile(parsedOptions);
+  resolveDefaults(parsedOptions);
   const options = await completeOptions(parsedOptions);
   if (!options.projectName) {
     printHelp();
@@ -1370,6 +1988,8 @@ async function main() {
   }
   if (!REPO_STRATEGIES[options.repoStrategy]) options.repoStrategy = "create";
   if (!ROLE_PRESETS[options.preset]) options.preset = "tech";
+  if (!TEAM_PROFILES[options.teamProfile]) options.teamProfile = "full-7";
+  if (!STARTUP_MODES[options.startupMode]) options.startupMode = "discovery-first";
   if (
     options.repoStrategy === "reuse"
     && !options._worktreesFromCli
@@ -1377,13 +1997,27 @@ async function main() {
   ) {
     options.setupWorktrees = false;
   }
-  if (!["workspace", "repo", "none"].includes(options.gitRoot)) options.gitRoot = "repo";
+  if (!["workspace", "repo", "none"].includes(options.gitRoot)) options.gitRoot = "workspace";
   if (!["auto", "guide", "off"].includes(options.initialSignoff)) options.initialSignoff = "auto";
-  if (options.gitRoot !== "repo" && !options._worktreesFromCli) options.setupWorktrees = false;
+  // delivery-ready 双仓模式：gitRoot 保持 workspace，worktree 由 setupGitWorkspace 双仓逻辑处理
+  if (options.startupMode === "delivery-ready" && !options._worktreesFromCli) {
+    options.setupWorktrees = true;
+  }
+  // discovery-first 模式下不创建 worktree（但旧 --git-root=repo 模式保持原行为：默认创建 worktree）
+  if (options.startupMode === "discovery-first" && options.gitRoot !== "repo" && !options._worktreesFromCli) {
+    options.setupWorktrees = false;
+  }
+  // 旧 --git-root=repo 模式：默认创建 worktree
+  if (options.gitRoot === "repo" && !options._worktreesFromCli && options.startupMode !== "delivery-ready") {
+    options.setupWorktrees = true;
+  }
+  if (options.gitRoot !== "repo" && options.startupMode !== "delivery-ready" && !options._worktreesFromCli) {
+    options.setupWorktrees = false;
+  }
   if (!options.setupWorktrees) options.roleTestCommits = false;
 
   validateOptions(options);
-  const roles = buildRoles(options.preset, options.roleOverrides, options.emailOverrides, options.sprintNumber);
+  const roles = buildRoles(options.preset, options.roleOverrides, options.emailOverrides, options.sprintNumber, options.teamProfile);
   validateRoles(roles, options.pushRemote);
   const replacements = buildReplacements(options, roles);
   const target = path.resolve(process.cwd(), options.projectName);
@@ -1401,10 +2035,13 @@ async function main() {
     console.log(`[dry-run] 仓库策略：${replacements.REPO_STRATEGY_LABEL}`);
     console.log(`[dry-run] 来源仓库：${replacements.SOURCE_REPO}`);
     console.log(`[dry-run] 角色套装：${replacements.ROLE_PRESET_LABEL}`);
-    console.log(`[dry-run] 计划代码仓：${replacements.REPO_NAME}（是否创建以 Sprint 0 审批为准）`);
+    console.log(`[dry-run] 启动模式：${options.startupMode}`);
+    console.log(`[dry-run] 团队档位：${options.teamProfile}（${replacements.TEAM_PROFILE_LABEL}）`);
+    console.log(`[dry-run] 计划代码仓：${replacements.REPO_NAME}${options.startupMode === "delivery-ready" ? "（双仓模式：文档仓 + 独立代码仓）" : "（是否创建以 Sprint 0 审批为准）"}`);
     console.log(`[dry-run] 代码位置：${replacements.REPO_WORKSPACE_LOCATION}`);
-    console.log(`[dry-run] Git 模式：${options.gitRoot}`);
-    console.log(`[dry-run] 角色 worktree：${options.setupWorktrees ? "5 个" : "不创建"}`);
+    console.log(`[dry-run] Git 模式：${options.gitRoot}${options.startupMode === "delivery-ready" ? "（文档仓 Git 在项目根，代码仓 Git 独立）" : ""}`);
+    const wtRoles = roles.filter((r) => r.worktree);
+    console.log(`[dry-run] 角色 worktree：${options.setupWorktrees ? `${wtRoles.length} 个` : "不创建"}`);
     console.log(`[dry-run] 角色测试提交：${options.roleTestCommits ? "创建" : "不创建"}`);
     console.log(`[dry-run] 首签：${options.initialSignoff}（提醒截止 ${options.initialSignoffDue}）`);
     console.log(`[dry-run] 远端：${options.remoteUrl || "不配置"}${options.pushRemote ? "（将推送）" : ""}`);

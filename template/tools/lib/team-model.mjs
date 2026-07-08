@@ -21,6 +21,7 @@ export const HAT_LABELS = {
   ux: "UX",
   fs: "Full-stack",
   devops: "DevOps",
+  architecture: "Architecture",
 };
 
 const LEGACY_DEVELOPER_ROLES = ["tl", "midbe", "srfe", "midfe", "fs"];

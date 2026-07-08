@@ -5,9 +5,13 @@
 **本 Sprint 仓库策略：** {{REPO_STRATEGY_LABEL}}
 
 **角色套装：** {{ROLE_PRESET_LABEL}}
+**团队档位：** {{TEAM_PROFILE_LABEL}}
+**启动模式：** {{STARTUP_MODE_LABEL}}
 **创建日期：** {{CREATED_DATE}}
 
 这是一个 Scrum 团队协同工作区，包含项目运行、工程设计、质量发布、度量改进和代码仓库治理；仅在所选策略需要时生成新代码仓骨架。
+
+> **启动模式说明**：`discovery-first` 仅建文档治理仓，代码仓在 Sprint 0 审批后由 `setup-code-repo.mjs` 创建；`delivery-ready` 在创建时即建立文档仓 + 独立代码仓双仓模式，并按团队档位创建成员 worktree。
 
 ## 快速入口
 

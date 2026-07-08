@@ -128,6 +128,9 @@ node index.mjs <project-name> \
 | 1.0.0-rc.6 | 团队变更形成可签核事实 | RC5 的 add/assign 只改配置并输出建议，审计没有新 Change 可生成 Campaign | A. 仅提醒；B. 自动登记 Change+同步视图+SM 提交；C. 每次全员重签 | 选B；入队补基础基线，换帽只覆盖受影响成员 |
 | 1.0.0-rc.6 | 历史身份按工件快照验证 | 成员换邮箱会让已关闭 Campaign 在 Node 中失效，而 Python 仍有效 | A. 使用当前身份；B. 改写历史；C. Campaign/Notice/Closure 固化身份快照 | 选C；历史不漂移，当前身份只影响新工件 |
 | 1.0.0-rc.6 | 成员/帽子模型贯通仓库审批 | RC5 迁移 v2 后 setup-code-repo 仍读取 legacy role 字段 | A. 双写旧字段；B. 仓库工具统一加载团队模型 | 选B；PO/TL/执行人由当前责任解析 |
+| 1.1.0-rc.1 | 团队档位从 2 档扩展为 5 档 | 用户反馈 2 档（core/full）粒度太粗，小团队需要 lean-2/3 但不愿在交互中逐个调整 7 个角色 | A. 保持 2 档+交互微调；B. 动态自定义；C. 5 档预设覆盖典型场景 | 选C；模板帮助团队一次选中最接近现实的启动路线，而非运行中不断裁剪 |
+| 1.1.0-rc.1 | startup-mode 不等价于 --git-root=repo | delivery-ready 需要“文档仓+独立代码仓”双仓模式，而 --git-root=repo 把所有文件放一个 Git 仓会破坏首签 | A. 映射到 git-root=repo；B. 新建第三种 git-root；C. startup-mode 作为高层编排，git-root 保持 workspace | 选C；delivery-ready 在 setupGitWorkspace 内部实现双仓逻辑，不污染底层参数 |
+| 1.1.0-rc.1 | worktree 规则改为基于编码帽子 | 旧规则“PO/SM 不创建 worktree”在 lean-2 中 lead-a 兼 PO+TL+BE 时无法判断 | A. 按角色 ID；B. 按成员管理责任；C. 按是否有编码帽子 | 选C；只承担 PO/SM 管理责任的成员不创建 worktree，承担编码帽子的成员创建 |
 | Unreleased | L2 合并协议轻量模板 | 13 号规范提到"合并协议"但未给出具体模板，SM 启用 L2 时缺少可复制的起点 | A. 不补，依赖 SM 经验；B. 新增独立文件；C. 作为 13 号规范附录 A | 选C；仅 L2 启用，不增加 L0/L1 负担；含分区边界、合并窗口、仲裁、回滚和降级条件 |
 | Unreleased | 质量门禁清单模板 | 知识库要求"门禁标准在 Planning 时写死"，但 Sprint 任务表只有 DoD/excludes 列，缺乏独立门禁清单 | A. 不补，依赖任务表；B. 新增独立模板；C. 扩写任务表列 | 选B；一页以内，Planning 填、Review 查；含 Q01-Q06 默认 + Q07 自定义行；不变成大文档 |
 | Unreleased | 三个轻量只读辅助工具 | SM 在 Sprint 关闭、Daily 检查和 Frontmatter 治理上需要工具辅助，但不能变成流程驱动器 | A. 不补，全靠手工；B. 全自动化门禁；C. 只读检查/辅助输出 | 选C；lint-frontmatter 只查 managed；sprint-close 生成 tag message 不自动执行；flow-status 推断阶段不替代 SM 判断 |

@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -2119,6 +2119,316 @@ test("RC6 historical Campaign and Closure survive later member identity changes"
       "utf8",
     ));
     assert.equal(audit.pendingCount, 0);
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+// ── v1.1.0-rc.1: 团队档位与启动路线 ──
+
+test("v1.1.0 full-7 default generates v2 roles.config.json with backward-compatible v1 fields", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-v11-full7-"));
+  const target = path.join(sandbox, "project");
+  try {
+    runCli([target, "--no-git", "--no-worktrees"]);
+    const cfg = JSON.parse(
+      fs.readFileSync(path.join(target, "00_项目导航", "roles.config.json"), "utf8"),
+    );
+    // v2 格式
+    assert.equal(cfg.schemaVersion, 2);
+    assert.equal(cfg.model, "member-hat-v1");
+    assert.equal(cfg.teamProfile, "full-7");
+    assert.equal(cfg.startupMode, "discovery-first");
+    // 兼容字段
+    assert.ok(cfg.roles && Object.keys(cfg.roles).length === 7);
+    assert.ok(cfg.emails && Object.keys(cfg.emails).length === 7);
+    assert.ok(Array.isArray(cfg.roleDetails) && cfg.roleDetails.length === 7);
+    // v2 字段
+    assert.ok(Array.isArray(cfg.members) && cfg.members.length === 7);
+    assert.ok(cfg.scrum);
+    assert.ok(cfg.hats);
+    assert.ok(Array.isArray(cfg.assignments));
+    // teamStage 兼容
+    assert.equal(cfg.teamStage, "full-7");
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("v1.1.0 core + discovery-first produces 3 active members and 0 worktrees", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-v11-core-df-"));
+  const target = path.join(sandbox, "project");
+  try {
+    runCli([
+      target,
+      "--startup-mode=discovery-first",
+      "--team-profile=core",
+      "--no-git",
+      "--no-worktrees",
+    ]);
+    const cfg = JSON.parse(
+      fs.readFileSync(path.join(target, "00_项目导航", "roles.config.json"), "utf8"),
+    );
+    assert.equal(cfg.teamProfile, "core");
+    assert.equal(cfg.startupMode, "discovery-first");
+    const active = cfg.roleDetails.filter((r) => r.status === "active");
+    assert.equal(active.length, 3);
+    assert.deepEqual(
+      active.map((r) => r.id).sort(),
+      ["po", "sm", "tl"],
+    );
+    // discovery-first 模式不创建 worktree
+    assert.equal(cfg.setupWorktrees, false);
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("v1.1.0 core + delivery-ready produces 3 active and 1 worktree (TL)", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-v11-core-dr-"));
+  const target = path.join(sandbox, "project");
+  try {
+    runCli([
+      target,
+      "--startup-mode=delivery-ready",
+      "--team-profile=core",
+      "--repo=core-dr-app",
+      "--initial-signoff=off",
+    ]);
+    const cfg = JSON.parse(
+      fs.readFileSync(path.join(target, "00_项目导航", "roles.config.json"), "utf8"),
+    );
+    assert.equal(cfg.teamProfile, "core");
+    assert.equal(cfg.startupMode, "delivery-ready");
+    const active = cfg.roleDetails.filter((r) => r.status === "active");
+    assert.equal(active.length, 3);
+    // core 档只有 TL 有 worktree（PO/SM 是管理角色不创建 worktree）
+    const wtRoles = cfg.roleDetails.filter((r) => r.worktree);
+    assert.equal(wtRoles.length, 1);
+    assert.equal(wtRoles[0].id, "tl");
+    // 双仓模式：文档仓和代码仓是独立 Git
+    assert.equal(
+      git(target, ["rev-parse", "--is-inside-work-tree"]).trim(),
+      "true",
+      "doc repo should be a git repo",
+    );
+    const codeRepo = path.join(target, "10_代码仓库", "core-dr-app");
+    assert.equal(
+      git(codeRepo, ["rev-parse", "--is-inside-work-tree"]).trim(),
+      "true",
+      "code repo should be a separate git repo",
+    );
+    // 文档仓的 Git 不包含代码仓目录
+    assert.match(
+      fs.readFileSync(path.join(target, ".gitignore"), "utf8"),
+      /10_代码仓库\/core-dr-app\//,
+    );
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("v1.1.0 balanced-5 profile has 5 members with correct worktree count", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-v11-bal5-"));
+  const target = path.join(sandbox, "project");
+  try {
+    runCli([
+      target,
+      "--startup-mode=delivery-ready",
+      "--team-profile=balanced-5",
+      "--repo=bal5-app",
+      "--initial-signoff=off",
+    ]);
+    const cfg = JSON.parse(
+      fs.readFileSync(path.join(target, "00_项目导航", "roles.config.json"), "utf8"),
+    );
+    assert.equal(cfg.teamProfile, "balanced-5");
+    assert.equal(cfg.roleDetails.length, 5);
+    // balanced-5: po, sm, tl, beqa, fefs
+    // PO/SM 不创建 worktree；TL/beqa/fefs 创建 worktree → 3 worktrees
+    const wtRoles = cfg.roleDetails.filter((r) => r.worktree);
+    assert.equal(wtRoles.length, 3);
+    assert.deepEqual(
+      wtRoles.map((r) => r.id).sort(),
+      ["beqa", "fefs", "tl"],
+    );
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("v1.1.0 lean-3 profile has 3 members with 2 worktrees", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-v11-lean3-"));
+  const target = path.join(sandbox, "project");
+  try {
+    runCli([
+      target,
+      "--startup-mode=delivery-ready",
+      "--team-profile=lean-3",
+      "--repo=lean3-app",
+      "--initial-signoff=off",
+    ]);
+    const cfg = JSON.parse(
+      fs.readFileSync(path.join(target, "00_项目导航", "roles.config.json"), "utf8"),
+    );
+    assert.equal(cfg.teamProfile, "lean-3");
+    assert.equal(cfg.roleDetails.length, 3);
+    // lean-3: product-coach (PO+SM), tech-builder (TL+backend+qa), delivery-builder (frontend+fs+devops)
+    // product-coach 不创建 worktree（只承担 PO/SM 管理责任）
+    // tech-builder 和 delivery-builder 创建 worktree → 2 worktrees
+    const wtRoles = cfg.roleDetails.filter((r) => r.worktree);
+    assert.equal(wtRoles.length, 2);
+    assert.deepEqual(
+      wtRoles.map((r) => r.id).sort(),
+      ["delivery-builder", "tech-builder"],
+    );
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("v1.1.0 lean-2 profile has 2 members with 2 worktrees", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-v11-lean2-"));
+  const target = path.join(sandbox, "project");
+  try {
+    runCli([
+      target,
+      "--startup-mode=delivery-ready",
+      "--team-profile=lean-2",
+      "--repo=lean2-app",
+      "--initial-signoff=off",
+    ]);
+    const cfg = JSON.parse(
+      fs.readFileSync(path.join(target, "00_项目导航", "roles.config.json"), "utf8"),
+    );
+    assert.equal(cfg.teamProfile, "lean-2");
+    assert.equal(cfg.roleDetails.length, 2);
+    // lean-2: lead-a (PO+TL+backend), lead-b (SM+frontend+fs+devops+qa)
+    // 两个成员都承担编码帽子，都创建 worktree → 2 worktrees
+    const wtRoles = cfg.roleDetails.filter((r) => r.worktree);
+    assert.equal(wtRoles.length, 2);
+    assert.deepEqual(
+      wtRoles.map((r) => r.id).sort(),
+      ["lead-a", "lead-b"],
+    );
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("v1.1.0 --team-stage and --preset backward compatibility", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-v11-compat-"));
+  const target = path.join(sandbox, "project");
+  try {
+    runCli([
+      target,
+      "--team-stage=core",
+      "--preset=tech",
+      "--no-git",
+      "--no-worktrees",
+    ]);
+    const cfg = JSON.parse(
+      fs.readFileSync(path.join(target, "00_项目导航", "roles.config.json"), "utf8"),
+    );
+    // --team-stage=core maps to teamProfile=core
+    assert.equal(cfg.teamProfile, "core");
+    assert.equal(cfg.teamStage, "core");
+    // --preset=tech maps to namePreset=tech (preset field stays for compat)
+    assert.equal(cfg.preset, "tech");
+    // core profile: 3 active
+    const active = cfg.roleDetails.filter((r) => r.status === "active");
+    assert.equal(active.length, 3);
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("v1.1.0 lean-3 email format uses memberId with hyphens converted to underscores", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-v11-email-"));
+  const target = path.join(sandbox, "project");
+  try {
+    runCli([
+      target,
+      "--startup-mode=delivery-ready",
+      "--team-profile=lean-3",
+      "--repo=email-app",
+      "--no-git",
+      "--no-worktrees",
+    ]);
+    const cfg = JSON.parse(
+      fs.readFileSync(path.join(target, "00_项目导航", "roles.config.json"), "utf8"),
+    );
+    // lean-3 member IDs: product-coach, tech-builder, delivery-builder
+    // Email should use hyphens converted to underscores
+    const coach = cfg.roleDetails.find((r) => r.id === "product-coach");
+    assert.ok(coach, "product-coach member should exist");
+    assert.match(coach.email, /product_coach@/);
+    const builder = cfg.roleDetails.find((r) => r.id === "tech-builder");
+    assert.ok(builder, "tech-builder member should exist");
+    assert.match(builder.email, /tech_builder@/);
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("v1.1.0 delivery-ready dual-repo: doc repo and code repo have independent Git histories", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-v11-dualrepo-"));
+  const target = path.join(sandbox, "project");
+  try {
+    runCli([
+      target,
+      "--startup-mode=delivery-ready",
+      "--team-profile=balanced-5",
+      "--repo=dual-app",
+      "--initial-signoff=off",
+    ]);
+    const codeRepo = path.join(target, "10_代码仓库", "dual-app");
+    // Both repos should be git repos
+    assert.equal(git(target, ["rev-parse", "--is-inside-work-tree"]).trim(), "true");
+    assert.equal(git(codeRepo, ["rev-parse", "--is-inside-work-tree"]).trim(), "true");
+    // They should have different commit hashes (independent histories)
+    const docHead = git(target, ["rev-parse", "HEAD"]);
+    const codeHead = git(codeRepo, ["rev-parse", "HEAD"]);
+    assert.notEqual(docHead, codeHead, "doc and code repos should have independent HEADs");
+    // Code repo should have sprint branch
+    const branches = git(codeRepo, ["branch", "--format=%(refname:short)"]).split(/\r?\n/);
+    assert.ok(branches.includes("main"));
+    assert.ok(branches.some((b) => b.startsWith("sprint-")));
+    // Worktrees should exist in code repo's TeamWork/
+    const teamworkDir = path.join(codeRepo, "TeamWork");
+    assert.ok(fs.existsSync(teamworkDir), "TeamWork directory should exist in code repo");
+    const wtDirs = fs.readdirSync(teamworkDir).filter((d) =>
+      fs.statSync(path.join(teamworkDir, d)).isDirectory(),
+    );
+    assert.ok(wtDirs.length >= 1, "at least one worktree directory should exist");
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("v1.1.0 delivery-ready initial signoff runs in the doc repo", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-v11-signoff-"));
+  const target = path.join(sandbox, "project");
+  const roleIds = ["po", "sm", "tl", "midbe", "srfe", "midfe", "fs"];
+  try {
+    const output = runCli([
+      target,
+      "--startup-mode=delivery-ready",
+      "--team-profile=full-7",
+      "--repo=signoff-app",
+      ...roleIds.map((id) => `--email.${id}=${id}@example.test`),
+    ]);
+    // 首签应发起在文档仓（项目根），不是代码仓
+    assert.match(output, /首签已发起：SIGN-\d{8}-001/);
+    const campaignDir = path.join(target, ".team", "signoffs", "campaigns");
+    assert.ok(fs.existsSync(campaignDir), "signoff campaigns should be in doc repo (project root)");
+    // 代码仓不应有 .team/signoffs
+    const codeRepoSignoffs = path.join(target, "10_代码仓库", "signoff-app", ".team", "signoffs");
+    assert.equal(
+      fs.existsSync(codeRepoSignoffs),
+      false,
+      "code repo should not have signoff data",
+    );
   } finally {
     fs.rmSync(sandbox, { recursive: true, force: true });
   }
