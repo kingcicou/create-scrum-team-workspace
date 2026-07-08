@@ -11,19 +11,19 @@
 ### 方式一：Bash 一键执行（macOS / Linux / WSL / Git Bash）
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.1.0-rc.1/create.sh) my-project
+bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.1.0-rc.2/create.sh) my-project
 ```
 
 可叠加任意 CLI 选项：
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.1.0-rc.1/create.sh) my-project --type=new --preset=tech
+bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.1.0-rc.2/create.sh) my-project --type=new --preset=tech
 ```
 
 ### 方式二：PowerShell 一键执行（Windows）
 
 ```powershell
-irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.1.0-rc.1/create.ps1 | iex
+irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.1.0-rc.2/create.ps1 | iex
 ```
 
 执行后会进入交互式创建。也可提前设环境变量传项目名与额外参数：
@@ -31,20 +31,20 @@ irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.1
 ```powershell
 $env:PROJECT_NAME="my-project"
 $env:SCRUM_TEMPLATE_ARGS="--type=new --preset=tech"
-irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.1.0-rc.1/create.ps1 | iex
+irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.1.0-rc.2/create.ps1 | iex
 ```
 
 ### 方式三：npx（全平台，需 Node.js >= 24）
 
 ```bash
 # 直接从 GitHub 执行（推荐，与参考仓库一致）
-npx -y github:kingcicou/create-scrum-team-workspace#v1.1.0-rc.1 my-project
+npx -y github:kingcicou/create-scrum-team-workspace#v1.1.0-rc.2 my-project
 
 # 仅预览不写盘
-npx -y github:kingcicou/create-scrum-team-workspace#v1.1.0-rc.1 my-project --dry-run
+npx -y github:kingcicou/create-scrum-team-workspace#v1.1.0-rc.2 my-project --dry-run
 
 # 交互式
-npx -y github:kingcicou/create-scrum-team-workspace#v1.1.0-rc.1 --interactive
+npx -y github:kingcicou/create-scrum-team-workspace#v1.1.0-rc.2 --interactive
 ```
 
 > 未发布到 npm registry，请使用 `github:` 前缀。
@@ -440,12 +440,20 @@ rm -rf verify-local
 
 ## 测试
 
-零 npm 运行时依赖，使用 Node 内置 `node:test` runner。需要 Node.js ≥ 24、Git ≥ 2.28；
-创建者/SM 执行审计型签核命令时还需 Python 3：
+零 npm 运行时依赖，使用 Node 内置 `node:test` runner。需要 Node.js ≥ 24、Git ≥ 2.28、
+Python 3（测试会调用 `generate_doc_index.py` 验证文档索引生成）。
 
 ```bash
 npm test
 ```
+
+> **Windows 环境提示**：如果系统 `python` 命令不可用（如 Windows Store stub），
+> 请设置 `PYTHON` 环境变量指向真实的 Python 可执行文件：
+> ```powershell
+> $env:PYTHON = "C:\Path\To\python.exe"
+> npm test
+> ```
+> 测试脚本会按 `PYTHON` 环境变量 → `python3` → `python` → `py` 顺序自动探测。
 
 覆盖：
 

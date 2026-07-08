@@ -19,6 +19,27 @@ const cliPath = path.join(packageDir, "index.mjs");
 const pkgVersion = JSON.parse(
   fs.readFileSync(path.join(packageDir, "package.json"), "utf8"),
 ).version;
+
+/**
+ * 解析 Python 可执行文件路径，优先级：
+ *   1. process.env.PYTHON（用户显式指定）
+ *   2. python3 / python / py（逐个尝试 execSync --version）
+ * 返回找到的第一个可用的命令名。Windows 上 `python` 可能是 Windows Store stub，
+ * 因此需要逐个探测而非直接 fallback。
+ */
+const resolvePython = (() => {
+  if (process.env.PYTHON) return process.env.PYTHON;
+  const candidates = ["python3", "python", "py"];
+  for (const cmd of candidates) {
+    try {
+      execFileSync(cmd, ["--version"], { stdio: "pipe", encoding: "utf8" });
+      return cmd;
+    } catch {
+      // 继续尝试下一个候选
+    }
+  }
+  return "python"; // 最终 fallback，让 execFileSync 抛出可读错误
+})();
 // 与 signoff.mjs 的 localDate() 一致（本地时区日期），用于拼接当日生成的 Campaign/Event ID。
 const todayCompact = (() => {
   const now = new Date();
@@ -695,7 +716,7 @@ test("v0.5.0 generates lightweight Sprint closure guidance", () => {
 test("v0.9.1 scopes governance debt and keeps onboarding non-blocking", () => {
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-091-"));
   const target = path.join(sandbox, "project");
-  const python = process.env.PYTHON || "python";
+  const python = resolvePython;
 
   try {
     runCli([target, "--repo=governed-app", "--no-git", "--no-worktrees"]);
@@ -880,7 +901,7 @@ test("v0.9.2 generates actionable closure and review integrity guidance", () => 
 test("v0.9.3 keeps signoff orchestration with SM and normalizes role scope", () => {
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-093-"));
   const target = path.join(sandbox, "project");
-  const python = process.env.PYTHON || "python";
+  const python = resolvePython;
 
   try {
     runCli([target, "--repo=signoff-app", "--no-git", "--no-worktrees"]);
@@ -990,7 +1011,7 @@ test("v0.9.4 preserves Sprint lessons across knowledge, operations, and source t
 test("v0.9.5 traces catch-up coverage and keeps rebaseline history honest", () => {
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-095-"));
   const target = path.join(sandbox, "project");
-  const python = process.env.PYTHON || "python";
+  const python = resolvePython;
 
   try {
     runCli([target, "--repo=event-app", "--no-git", "--no-worktrees"]);
@@ -1081,7 +1102,7 @@ test("v0.9.5 traces catch-up coverage and keeps rebaseline history honest", () =
 test("v0.9.6 detects cosigning and excludes anomalous coverage from verified", () => {
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-096-"));
   const target = path.join(sandbox, "project");
-  const python = process.env.PYTHON || "python";
+  const python = resolvePython;
 
   const runGen = () =>
     execFileSync(python, [path.join(target, "tools", "generate_doc_index.py")], {
@@ -1962,7 +1983,7 @@ test("R4.3b generate_doc_index.py works with v2 member-hat config", () => {
     fs.writeFileSync(cfgFile, `${JSON.stringify(v2, null, 2)}\n`, "utf8");
 
     const py = path.join(target, "tools", "generate_doc_index.py");
-    const python = process.env.PYTHON || "python";
+    const python = resolvePython;
     const pyOut = execFileSync(python, [py], {
       cwd: target,
       encoding: "utf8",
@@ -2001,7 +2022,7 @@ test("RC6 team mutations create auditable changes and v2 teams can approve a cod
     assert.ok(assignChange);
     assert.notEqual(addChange, assignChange);
 
-    const python = process.env.PYTHON || "python";
+    const python = resolvePython;
     execFileSync(python, [path.join(target, "tools", "generate_doc_index.py")], {
       cwd: target,
       encoding: "utf8",
@@ -2108,7 +2129,7 @@ test("RC6 historical Campaign and Closure survive later member identity changes"
     assert.match(status, /tl .*: VALID/);
     assert.match(status, /Closure: CLOSED/);
 
-    const python = process.env.PYTHON || "python";
+    const python = resolvePython;
     execFileSync(python, [path.join(target, "tools", "generate_doc_index.py")], {
       cwd: target,
       encoding: "utf8",
@@ -2429,6 +2450,49 @@ test("v1.1.0 delivery-ready initial signoff runs in the doc repo", () => {
       false,
       "code repo should not have signoff data",
     );
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("v1.1.0 lean-2 + delivery-ready + auto signoff end-to-end", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-v11-lean2-signoff-"));
+  const target = path.join(sandbox, "project");
+  try {
+    const output = runCli([
+      target,
+      "--startup-mode=delivery-ready",
+      "--team-profile=lean-2",
+      "--repo=lean2-signoff-app",
+      "--email.lead-a=lead-a@example.test",
+      "--email.lead-b=lead-b@example.test",
+    ]);
+    // 首签应发起在文档仓
+    assert.match(output, /首签已发起：SIGN-\d{8}-001/);
+    const campaignDir = path.join(target, ".team", "signoffs", "campaigns");
+    assert.ok(fs.existsSync(campaignDir), "signoff campaigns should be in doc repo (project root)");
+    // 代码仓不应有 .team/signoffs
+    const codeRepoSignoffs = path.join(target, "10_代码仓库", "lean2-signoff-app", ".team", "signoffs");
+    assert.equal(fs.existsSync(codeRepoSignoffs), false, "code repo should not have signoff data");
+    // lean-2 只覆盖 2 个成员
+    const campaignFile = fs.readdirSync(campaignDir)[0];
+    const campaign = JSON.parse(fs.readFileSync(path.join(campaignDir, campaignFile), "utf8"));
+    assert.ok(campaign.participants, "campaign should have participants");
+    const signerIds = Object.keys(campaign.participants);
+    assert.equal(signerIds.length, 2, `lean-2 should have exactly 2 participants, got ${signerIds.length}`);
+    assert.deepEqual(signerIds.sort(), ["lead-a", "lead-b"]);
+    // .gitignore 应有活跃条目，无注释残留
+    const gitignore = fs.readFileSync(path.join(target, ".gitignore"), "utf8");
+    assert.ok(gitignore.includes("10_代码仓库/lean2-signoff-app/"), "gitignore should have active code repo entry");
+    assert.ok(
+      !gitignore.split("\n").some((line) => line.trim() === "# 10_代码仓库/lean2-signoff-app/"),
+      "gitignore should not have commented-out entry for the code repo",
+    );
+    // 两个成员都应有 worktree
+    const teamworkDir = path.join(target, "10_代码仓库", "lean2-signoff-app", "TeamWork");
+    assert.ok(fs.existsSync(teamworkDir), "TeamWork directory should exist in code repo");
+    const worktreeDirs = fs.readdirSync(teamworkDir).filter((d) => !d.startsWith("."));
+    assert.equal(worktreeDirs.length, 2, `lean-2 should have 2 worktrees, got ${worktreeDirs.length}`);
   } finally {
     fs.rmSync(sandbox, { recursive: true, force: true });
   }

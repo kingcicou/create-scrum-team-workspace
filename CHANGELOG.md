@@ -6,6 +6,32 @@
 
 ## [Unreleased]
 
+## [1.1.0-rc.2] - 2026-07-08
+
+### Fixed
+
+- **交互模式提问顺序**：`startup-mode` 和 `team-profile` 提前到 `git-root` 之前，
+  避免 git-root 选项被 startup-mode 推导覆盖。移除交互模式中过时的 `repo` 选项
+  （已被 `delivery-ready` 双仓模式取代），仅保留 `workspace`（推荐）和 `none`。
+- **lean 档首签 actor 解析**：`setupInitialSignoff` 硬编码 `--actor=sm`，在 lean-2/lean-3
+  下 SM 的 memberId 不是 `sm`（如 `lead-b`）导致首签失败。改为从 team profile 解析
+  `scrum.scrumMaster` 获取实际 memberId。
+- **`.gitignore` 注释残留**：`delivery-ready` 模式下添加活跃 gitignore 条目时，
+  同时移除模板中被注释掉的对应行，避免活跃行与注释行并存。
+
+### Added
+
+- **lean-2 端到端首签测试**：覆盖 `lean-2 + delivery-ready + auto signoff` 完整流程，
+  验证首签在文档仓运行、campaign 只覆盖 2 个 active 成员、`.gitignore` 无注释残留、
+  worktree 数量正确。
+- **Python 自动探测**：测试脚本新增 `resolvePython` 帮助函数，按 `PYTHON` 环境变量
+  → `python3` → `python` → `py` 顺序自动探测可用 Python 可执行文件，
+  解决 Windows Store stub 导致的 `python` 命令不可用问题。
+
+### Changed
+
+- README 测试章节补充 Python 环境要求和 Windows `PYTHON` 环境变量说明。
+
 ## [1.1.0-rc.1] - 2026-07-08
 
 ### Added

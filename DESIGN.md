@@ -131,6 +131,8 @@ node index.mjs <project-name> \
 | 1.1.0-rc.1 | 团队档位从 2 档扩展为 5 档 | 用户反馈 2 档（core/full）粒度太粗，小团队需要 lean-2/3 但不愿在交互中逐个调整 7 个角色 | A. 保持 2 档+交互微调；B. 动态自定义；C. 5 档预设覆盖典型场景 | 选C；模板帮助团队一次选中最接近现实的启动路线，而非运行中不断裁剪 |
 | 1.1.0-rc.1 | startup-mode 不等价于 --git-root=repo | delivery-ready 需要“文档仓+独立代码仓”双仓模式，而 --git-root=repo 把所有文件放一个 Git 仓会破坏首签 | A. 映射到 git-root=repo；B. 新建第三种 git-root；C. startup-mode 作为高层编排，git-root 保持 workspace | 选C；delivery-ready 在 setupGitWorkspace 内部实现双仓逻辑，不污染底层参数 |
 | 1.1.0-rc.1 | worktree 规则改为基于编码帽子 | 旧规则“PO/SM 不创建 worktree”在 lean-2 中 lead-a 兼 PO+TL+BE 时无法判断 | A. 按角色 ID；B. 按成员管理责任；C. 按是否有编码帽子 | 选C；只承担 PO/SM 管理责任的成员不创建 worktree，承担编码帽子的成员创建 |
+| 1.1.0-rc.2 | 交互模式提问顺序修正 | git-root 在 startup-mode 之前询问会被后者覆盖，用户选择无效 | A. 保持原序+注释；B. 移除 git-root 问题；C. startup-mode 提前，git-root 简化为 workspace/none | 选C；startup-mode 决定 git-root，交互只确认是否跳过 Git |
+| 1.1.0-rc.2 | lean 档首签 actor 从 profile 解析 | 硬编码 `--actor=sm` 在 lean-2/3 下 SM memberId 不是 `sm`（如 `lead-b`）导致首签失败 | A. 在 signoff 工具加别名映射；B. 统一 memberId 规范；C. 从 team profile 解析 `scrum.scrumMaster` | 选C；index.mjs 从 `TEAM_PROFILES[profile].scrum.scrumMaster` 获取实际 memberId |
 | Unreleased | L2 合并协议轻量模板 | 13 号规范提到"合并协议"但未给出具体模板，SM 启用 L2 时缺少可复制的起点 | A. 不补，依赖 SM 经验；B. 新增独立文件；C. 作为 13 号规范附录 A | 选C；仅 L2 启用，不增加 L0/L1 负担；含分区边界、合并窗口、仲裁、回滚和降级条件 |
 | Unreleased | 质量门禁清单模板 | 知识库要求"门禁标准在 Planning 时写死"，但 Sprint 任务表只有 DoD/excludes 列，缺乏独立门禁清单 | A. 不补，依赖任务表；B. 新增独立模板；C. 扩写任务表列 | 选B；一页以内，Planning 填、Review 查；含 Q01-Q06 默认 + Q07 自定义行；不变成大文档 |
 | Unreleased | 三个轻量只读辅助工具 | SM 在 Sprint 关闭、Daily 检查和 Frontmatter 治理上需要工具辅助，但不能变成流程驱动器 | A. 不补，全靠手工；B. 全自动化门禁；C. 只读检查/辅助输出 | 选C；lint-frontmatter 只查 managed；sprint-close 生成 tag message 不自动执行；flow-status 推断阶段不替代 SM 判断 |

@@ -811,38 +811,7 @@ async function completeOptions(options) {
         : "目标代码仓库名（10_代码仓库/<repo>）";
       options.repoName = await ask(rl, repoPrompt, defaultRepo);
     }
-    options.gitRoot = await askChoice(
-      rl,
-      "Git 初始化模式",
-      options.repoStrategy === "reuse"
-        ? {
-            workspace: "仅将项目工作区初始化为文档仓（推荐）",
-            none: "完全不初始化 Git",
-          }
-        : {
-            workspace: "仅创建文档治理仓，代码仓 Sprint 0 后按决策补建（推荐）",
-            repo: "立即初始化独立代码仓（技术方案已明确）",
-            none: "不自动初始化",
-          },
-      options.gitRoot,
-    );
-    options.initialSignoff = await askChoice(
-      rl,
-      "首次入队签核",
-      {
-        auto: "条件满足时自动生成 Campaign 与 Notice（推荐）",
-        guide: "只生成后续操作指引",
-        off: "暂不启用",
-      },
-      options.initialSignoff,
-    );
-    if (options.initialSignoff !== "off") {
-      options.initialSignoffDue = await ask(
-        rl,
-        "首签提醒截止（+72h 或带时区的时间）",
-        options.initialSignoffDue,
-      );
-    }
+    // ── 启动路线（先问 startup-mode，再推导 gitRoot，避免先选 gitRoot 后被覆盖） ──
     options.startupMode = await askChoice(
       rl,
       "启动模式",
@@ -862,10 +831,43 @@ async function completeOptions(options) {
       options.preset,
     );
 
-    // 同步 gitRoot 和 setupWorktrees
+    // 从 startup-mode 推导 gitRoot 和 setupWorktrees（delivery-ready 和 discovery-first 均为 workspace）
     const mode = STARTUP_MODES[options.startupMode];
     if (mode && !options._gitRootFromCli) options.gitRoot = mode.gitRoot;
     if (mode && !options._worktreesFromCli) options.setupWorktrees = mode.createWorktrees;
+
+    // 仅在非 CLI 指定时，交互确认是否跳过 Git
+    if (!options._gitRootFromCli) {
+      options.gitRoot = await askChoice(
+        rl,
+        "Git 初始化",
+        {
+          workspace: options.startupMode === "delivery-ready"
+            ? "初始化文档治理仓 + 独立代码仓（双仓模式，推荐）"
+            : "初始化文档治理仓（推荐）",
+          none: "完全不初始化 Git",
+        },
+        options.gitRoot,
+      );
+    }
+
+    options.initialSignoff = await askChoice(
+      rl,
+      "首次入队签核",
+      {
+        auto: "条件满足时自动生成 Campaign 与 Notice（推荐）",
+        guide: "只生成后续操作指引",
+        off: "暂不启用",
+      },
+      options.initialSignoff,
+    );
+    if (options.initialSignoff !== "off") {
+      options.initialSignoffDue = await ask(
+        rl,
+        "首签提醒截止（+72h 或带时区的时间）",
+        options.initialSignoffDue,
+      );
+    }
 
     console.log("\n当前角色配置：");
     printRoleSummary(buildRoles(options.preset, options.roleOverrides, options.emailOverrides, options.sprintNumber, options.teamProfile));
@@ -1651,10 +1653,13 @@ function setupGitWorkspace(target, options, repoName, roles) {
     if (fs.existsSync(gitignorePath)) {
       gitignoreContent = fs.readFileSync(gitignorePath, "utf8");
     }
-    // 检查是否已有非注释的活跃规则（模板中可能有 # 10_代码仓库/repoName/ 注释行）
+    // 检查是否已有非注释的活跃规则
     const hasActiveEntry = gitignoreContent.split("\n").some((line) => line.trim() === codeRepoEntry);
     if (!hasActiveEntry) {
-      gitignoreContent = gitignoreContent.trimEnd() + "\n" + codeRepoEntry + "\n";
+      // 移除模板中的注释行（如 `# 10_代码仓库/signoff-app/`），避免活跃行与注释行并存
+      const commentedEntry = `# ${codeRepoEntry}`;
+      const lines = gitignoreContent.split("\n").filter((line) => line.trim() !== commentedEntry);
+      gitignoreContent = lines.join("\n").trimEnd() + "\n" + codeRepoEntry + "\n";
       fs.writeFileSync(gitignorePath, gitignoreContent, "utf8");
     }
   }
@@ -1870,10 +1875,14 @@ function setupInitialSignoff(target, options, roles, gitResult) {
     return { state: "guide", reason: reasons.join("；") || "当前条件不满足自动发起" };
   }
 
+  // 从 team profile 解析 SM 的 memberId（lean 档的 SM 不是 "sm"）
+  const profile = TEAM_PROFILES[options.teamProfile] || TEAM_PROFILES["full-7"];
+  const smMemberId = profile.scrum.scrumMaster;
+
   const tool = path.join(target, "tools", "signoff.mjs");
   const result = spawnSync(
     process.execPath,
-    [tool, "bootstrap", "--actor=sm", `--due=${options.initialSignoffDue}`],
+    [tool, "bootstrap", `--actor=${smMemberId}`, `--due=${options.initialSignoffDue}`],
     { cwd: target, encoding: "utf8" },
   );
   if (result.status !== 0) {
@@ -2068,6 +2077,9 @@ async function main() {
     console.log(`Sprint 集成分支：${gitResult.sprintBranch}`);
     console.log(`角色 worktree：${gitResult.worktrees.length} 个`);
   }
+  // 解析 SM memberId 用于引导提示（lean 档的 SM 不是 "sm"）
+  const smGuideActor = (TEAM_PROFILES[options.teamProfile] || TEAM_PROFILES["full-7"]).scrum.scrumMaster;
+
   console.log("\n下一步（启动与发现顺序）：");
   console.log("1. 打开 00_项目导航/00_项目首页.md，按 30 分钟上手了解流程。");
   console.log("2. 配置团队：完善 02_角色与联系方式.md 与 roles.config.json 的真实姓名/邮箱。");
@@ -2082,7 +2094,7 @@ async function main() {
   } else if (signoffResult.state === "guide") {
     console.log(`6. 首签尚未发起（${signoffResult.reason}）。`);
     console.log("   先将整个项目工作区纳入 Git、提交角色事实源并确认真实邮箱，再运行：");
-    console.log(`   node tools/signoff.mjs bootstrap --actor=sm --due=${options.initialSignoffDue}`);
+    console.log(`   node tools/signoff.mjs bootstrap --actor=${smGuideActor} --due=${options.initialSignoffDue}`);
   } else {
     console.log("6. 首签自动化已关闭；需要时由创建者运行 signoff bootstrap。");
   }
