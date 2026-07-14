@@ -1,5 +1,5 @@
 ﻿import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -438,6 +438,7 @@ test("generates one Sprint task table with owner memberId + responsibleHat and d
     assert.ok(content.includes("| T01 | Sprint Goal |"), "task table should be prefilled");
     assert.ok(content.includes("Owner（memberId）"), "task table should show owner memberId column");
     assert.ok(content.includes("责任帽子"), "task table should show responsibleHat column");
+    assert.ok(content.includes("输出/证据"), "task table should keep evidence in the task row");
     assert.ok(content.includes("| Muse (po) | po | Tempo |"), "decision task should bind owner memberId and hat");
     assert.ok(content.includes("| Bridge (fs) | devops | Forge |"), "environment task should bind owner memberId and hat");
     assert.ok(content.includes("验证目标代码仓与角色工作区"));
@@ -445,6 +446,9 @@ test("generates one Sprint task table with owner memberId + responsibleHat and d
     assert.ok(content.includes("可开始条件"));
     assert.ok(content.includes("完成标准（DoD）"));
     assert.ok(content.includes("## 4. Sprint 任务执行表"));
+    assert.ok(content.includes("## 0. Sprint 启动门禁"));
+    assert.ok(content.includes("## 5. 例外与裁决（仅异常时填写）"));
+    assert.ok(content.includes("正常事实只写任务行、PR/MR、CI 或 Review"));
     assert.ok(content.includes("不为普通实现任务另写报告"));
     assert.ok(content.includes("| CI 红灯 | 超过 2 小时 | ⚪ |"));
     assert.ok(content.includes("铁律：Sprint 结束后归档本监控台"));
@@ -2493,6 +2497,95 @@ test("v1.1.0 lean-2 + delivery-ready + auto signoff end-to-end", () => {
     assert.ok(fs.existsSync(teamworkDir), "TeamWork directory should exist in code repo");
     const worktreeDirs = fs.readdirSync(teamworkDir).filter((d) => !d.startsWith("."));
     assert.equal(worktreeDirs.length, 2, `lean-2 should have 2 worktrees, got ${worktreeDirs.length}`);
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("code preflight accepts the assigned feature worktree and rejects identity or branch drift", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-preflight-"));
+  const target = path.join(sandbox, "project");
+  try {
+    runCli([target, "--preset=studio", "--repo=preflight-app", "--git-root=repo", "--sprint=4"]);
+    const config = JSON.parse(fs.readFileSync(path.join(target, "00_项目导航", "roles.config.json"), "utf8"));
+    const role = config.roleDetails.find((item) => item.id === "midbe");
+    const repo = path.join(target, "10_代码仓库", "preflight-app");
+    const worktree = path.join(repo, "TeamWork", role.dirName);
+    const tool = path.join(target, "tools", "code-preflight.mjs");
+    const relativeWorktree = path.relative(target, worktree);
+
+    const valid = spawnSync(process.execPath, [tool, `--repo=${relativeWorktree}`, "--member=midbe", "--base=sprint-4"], {
+      cwd: target,
+      encoding: "utf8",
+    });
+    assert.equal(valid.status, 0, valid.stderr || valid.stdout);
+    assert.match(valid.stdout, /READY: 代码任务可以开工/);
+
+    const wrongMember = spawnSync(process.execPath, [tool, `--repo=${relativeWorktree}`, "--member=tl", "--base=sprint-4"], {
+      cwd: target,
+      encoding: "utf8",
+    });
+    assert.equal(wrongMember.status, 2);
+    assert.match(wrongMember.stderr, /Git 姓名不匹配|Git 邮箱不匹配/);
+
+    const integrationBranch = spawnSync(process.execPath, [tool, `--repo=${path.relative(target, repo)}`, "--member=fs", "--base=sprint-4"], {
+      cwd: target,
+      encoding: "utf8",
+    });
+    assert.equal(integrationBranch.status, 2);
+    assert.match(integrationBranch.stderr, /集成\/稳定分支|不符合 feature/);
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("sprint close blocks missing evidence and open exceptions", () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-close-"));
+  const sprintDir = path.join(sandbox, "Sprint-9");
+  fs.mkdirSync(sprintDir, { recursive: true });
+  const taskFile = path.join(sprintDir, "01_Sprint任务表与流程看板.md");
+  const closeTool = path.join(packageDir, "template", "tools", "sprint-close.mjs");
+  try {
+    fs.writeFileSync(path.join(sprintDir, "00_Sprint计划.md"), "# Sprint 9\n\n**Sprint Goal：** verify closure\n", "utf8");
+    fs.writeFileSync(path.join(sprintDir, "07_质量门禁清单.md"), [
+      "| # | 门禁名 | 触发时机 | 客观标准 | 验证方式 | Owner | 状态 |",
+      "|---|---|---|---|---|---|---|",
+      "| Q01 | Test | Close | pass | npm test | TL | ✅ 通过 |",
+    ].join("\n"), "utf8");
+    fs.writeFileSync(taskFile, [
+      "## 4. Sprint 任务执行表",
+      "| ID | 任务 | Owner | 输出/证据 | 状态 |",
+      "|---|---|---|---|---|",
+      "| T01 | Demo | dev | — | ✅ 完成 |",
+      "| T02 | Platform | ops | config abc | 🟡 配置完成；平台验证结转 |",
+      "",
+      "## 5. 关闭后复核：例外与裁决",
+      "| ID | 类型 | 事实与证据 | 影响 | 决策人 | 裁决/后续动作 | 状态 |",
+      "|---|---|---|---|---|---|---|",
+      "| EXC-S9-001 | identity | log | trace | FS | 待确认 | open |",
+    ].join("\n"), "utf8");
+
+    const blocked = spawnSync(process.execPath, [closeTool, sprintDir], { encoding: "utf8" });
+    assert.equal(blocked.status, 2);
+    assert.match(`${blocked.stdout}\n${blocked.stderr}`, /缺证据：T01/);
+    assert.match(`${blocked.stdout}\n${blocked.stderr}`, /未裁决：EXC-S9-001/);
+
+    fs.writeFileSync(taskFile, [
+      "## 4. Sprint 任务执行表",
+      "| ID | 任务 | Owner | 输出/证据 | 状态 |",
+      "|---|---|---|---|---|",
+      "| T01 | Demo | dev | commit abc + tests | ✅ 完成 |",
+      "| T02 | Platform | ops | config abc | 🟡 配置完成；平台验证结转 |",
+      "",
+      "## 5. 关闭后复核：例外与裁决",
+      "| ID | 类型 | 事实与证据 | 影响 | 决策人 | 裁决/后续动作 | 状态 |",
+      "|---|---|---|---|---|---|---|",
+      "| EXC-S9-001 | identity | log | trace | FS | 已纠正 | closed |",
+    ].join("\n"), "utf8");
+    const ready = spawnSync(process.execPath, [closeTool, sprintDir], { encoding: "utf8" });
+    assert.equal(ready.status, 0, ready.stderr || ready.stdout);
+    assert.match(ready.stdout, /待处理: 1 项 \(T02\)/);
+    assert.match(ready.stdout, /例外: 1，未裁决: 0/);
   } finally {
     fs.rmSync(sandbox, { recursive: true, force: true });
   }

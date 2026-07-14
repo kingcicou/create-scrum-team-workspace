@@ -1467,10 +1467,10 @@ function renderTaskExecutionTable(roles, today, options) {
     },
   ];
   return [
-    "| ID | 父项 | 任务 | 级别 | 复杂度 | Owner（memberId） | 责任帽子 | Reviewer | 可开始条件 | 具体动作 | 完成标准（DoD） | 不包含 | 状态 | 更新 |",
-    "| --- | --- | --- | --- | :---: | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    "| ID | 父项 | 任务 | 级别 | 复杂度 | Owner（memberId） | 责任帽子 | Reviewer | 可开始条件 | 具体动作 | 完成标准（DoD） | 不包含 | 输出/证据 | 状态 | 更新 |",
+    "| --- | --- | --- | --- | :---: | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ...rows.map((row) =>
-      `| ${row.id} | ${row.parent} | ${row.title} | ${row.level} | ${row.complexity} | ${row.ownerRole?.name || "待定"} (${row.ownerRole?.id || "待定"}) | ${row.responsibleHat} | ${row.reviewerRole?.name || "待定"} | ${row.start} | ${row.actions} | ${row.dod} | ${row.excludes} | 未开始 | ${today} |`
+      `| ${row.id} | ${row.parent} | ${row.title} | ${row.level} | ${row.complexity} | ${row.ownerRole?.name || "待定"} (${row.ownerRole?.id || "待定"}) | ${row.responsibleHat} | ${row.reviewerRole?.name || "待定"} | ${row.start} | ${row.actions} | ${row.dod} | ${row.excludes} | — | 未开始 | ${today} |`
     ),
   ].join("\n");
 }

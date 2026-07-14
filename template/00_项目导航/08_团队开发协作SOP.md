@@ -134,6 +134,16 @@ git -C TeamWork/Evan_MidFE_QA log -1 --format='%an <%ae>'
 
 > **铁律**：禁止用统一账号代替真实提交身份。每个 commit 必须能追溯到具体人。
 
+首次开工前运行预检；`--member` 使用 `roles.config.json` 的 memberId，`--base` 使用
+当前 Sprint 集成分支：
+
+```bash
+node tools/code-preflight.mjs --repo=<代码仓或worktree路径> --member=<memberId> --base=sprint-1
+```
+
+预检会校验仓库、feature 分支、上一基线祖先关系和 Git 姓名/邮箱。失败时先修正，
+不要提交后再由 SM 追查作者。
+
 ### 4.4 日常循环
 
 ```mermaid
@@ -149,6 +159,9 @@ flowchart LR
   G -->|是| H[FS 合并到 sprint-x]
   H --> I[Story 关 Done]
 ```
+
+Reviewer 给出 approve/change request；FS 或平台规则负责合并。Reviewer 不因“已经看过”
+而代替 Owner 提交，也不默认代替 FS 合并。若同一成员兼帽，需在任务表明确其本次责任帽子。
 
 具体命令：
 
@@ -216,6 +229,10 @@ PR 描述里必须含：
 
 ## 风险与回滚
 ```
+
+PR/MR 是首选评审事实源。平台暂不可用时可继续本地实现，但合并前必须在任务行留下
+等价证据：`reviewer + commit range + 测试命令/结果 + verdict + merge actor`。只有群聊
+“approve”而没有这些字段，不算可审计的完成证据。
 
 ---
 

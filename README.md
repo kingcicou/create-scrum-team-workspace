@@ -11,19 +11,19 @@
 ### 方式一：Bash 一键执行（macOS / Linux / WSL / Git Bash）
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.1.0-rc.4/create.sh) my-project
+bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.1.0-rc.5/create.sh) my-project
 ```
 
 可叠加任意 CLI 选项：
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.1.0-rc.4/create.sh) my-project --type=new --preset=tech
+bash <(curl -fsSL https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.1.0-rc.5/create.sh) my-project --type=new --preset=tech
 ```
 
 ### 方式二：PowerShell 一键执行（Windows）
 
 ```powershell
-irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.1.0-rc.4/create.ps1 | iex
+irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.1.0-rc.5/create.ps1 | iex
 ```
 
 执行后会进入交互式创建。也可提前设环境变量传项目名与额外参数：
@@ -31,20 +31,20 @@ irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.1
 ```powershell
 $env:PROJECT_NAME="my-project"
 $env:SCRUM_TEMPLATE_ARGS="--type=new --preset=tech"
-irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.1.0-rc.4/create.ps1 | iex
+irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.1.0-rc.5/create.ps1 | iex
 ```
 
 ### 方式三：npx（全平台，需 Node.js >= 24）
 
 ```bash
 # 直接从 GitHub 执行（推荐，与参考仓库一致）
-npx -y github:kingcicou/create-scrum-team-workspace#v1.1.0-rc.4 my-project
+npx -y github:kingcicou/create-scrum-team-workspace#v1.1.0-rc.5 my-project
 
 # 仅预览不写盘
-npx -y github:kingcicou/create-scrum-team-workspace#v1.1.0-rc.4 my-project --dry-run
+npx -y github:kingcicou/create-scrum-team-workspace#v1.1.0-rc.5 my-project --dry-run
 
 # 交互式
-npx -y github:kingcicou/create-scrum-team-workspace#v1.1.0-rc.4 --interactive
+npx -y github:kingcicou/create-scrum-team-workspace#v1.1.0-rc.5 --interactive
 ```
 
 > 未发布到 npm registry，请使用 `github:` 前缀。
@@ -478,7 +478,8 @@ npm test
 | `review-status.mjs` | SM / Review 主持人 | Review/Retro 完成后 | 检查评审纪要追加区唯一性，检测重复标题和锚点问题 |
 | `generate_doc_index.py` | SM | Sprint 末或异常触发 | 多维文档索引生成，只处理 `governance: managed` 产物 |
 | `lint-frontmatter.mjs` | SM / TL | Sprint 末或治理审计 | 只检查 `governance: managed` 文档的 Frontmatter 完整性 |
-| `sprint-close.mjs` | SM | Sprint 关闭前 | 读取任务表和门禁清单，生成 tag message 和更新提醒 |
+| `code-preflight.mjs` | 编码成员 / FS | 首次开工前 | 校验仓库、feature 分支、Sprint 基线和 Git 姓名/邮箱 |
+| `sprint-close.mjs` | SM | Sprint 关闭前 | 检查任务证据、例外/carry-over 和门禁，生成 tag message 与更新提醒 |
 | `flow-status.mjs` | SM | Daily Scrum 前 | 读取任务表推断当前阶段，输出阻塞/等待/可并行事项 |
 | `template-diff.mjs` | SM / TL | 模板更新后或 Retro | 对比项目侧与模板侧知识库文件差异，提示待回流/待同步项 |
 | `project-drift.mjs` | SM / TL | Retro 或治理审计 | 检测未替换占位符、项目独有文件和编号一致性问题 |
@@ -520,6 +521,9 @@ node tools/flow-status.mjs 03_迭代运行/Sprint-0-启动
 
 # Sprint 关闭助手（SM）
 node tools/sprint-close.mjs 03_迭代运行/Sprint-0-启动
+
+# 编码成员首次开工前
+node tools/code-preflight.mjs --repo=<代码仓或worktree路径> --member=<memberId> --base=sprint-1
 
 # 评审纪要检查（SM）
 node tools/review-status.mjs 03_迭代运行/Sprint-0-启动/02_Sprint0_Review纪要.md

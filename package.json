@@ -1,6 +1,6 @@
 {
   "name": "create-scrum-team-workspace",
-  "version": "1.1.0-rc.4",
+  "version": "1.1.0-rc.5",
   "description": "Scaffold a Scrum team governance workspace with member-hat roles, Sprint 0, signoff, and deferred code repository setup.",
   "type": "module",
   "license": "MIT",

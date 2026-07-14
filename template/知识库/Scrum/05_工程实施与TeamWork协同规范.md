@@ -71,6 +71,15 @@ git -C TeamWork/Evan_MidFE_QA config --worktree user.email "evan@example.com"
 worktree。角色工作区必须使用 `--worktree`，详见
 `11_角色工作区与Git身份引导规范.md`。
 
+首次开工前执行：
+
+```bash
+node tools/code-preflight.mjs --repo=<代码仓或worktree路径> --member=<memberId> --base=sprint-1
+```
+
+工具校验 feature 分支、Sprint 基线祖先关系和角色事实源中的姓名/邮箱。它是受信任团队
+的一致性预检，不是密码学身份认证；高保证场景可另行启用签名提交。
+
 ## 5. FS 集成职责
 
 | 职责 | 动作 |
@@ -81,6 +90,9 @@ worktree。角色工作区必须使用 `--worktree`，详见
 | 处理冲突 | 协调相关角色一起解决 |
 | 维护 CI 状态 | `sprint-x` 保持可构建、可测试 |
 | 准备 Review | 确保展示真实可运行增量 |
+
+Reviewer 负责 approve/change request，FS 或平台规则负责合并。若一人兼帽，任务行必须
+声明其本次责任帽子；不得用兼帽掩盖“自己实现、自己批准、自己合并”的未披露例外。
 
 ## 6. 完成证据必须记录
 
@@ -101,6 +113,10 @@ worktree。角色工作区必须使用 `--worktree`，详见
 - FS 集成结论：
 ```
 
+PR/MR 为首选事实源。平台暂不可用时，等价证据必须同时记录：`reviewer`、
+`commit range`、`测试命令/结果`、`verdict`、`merge actor`。群聊 approve 只能通知，
+不能单独证明评审和合并闭环。
+
 没有适用的分支/提交、测试证据和集成结论的 Story，不应标记为 Done。
 
 ## 7. 禁止事项
@@ -111,3 +127,4 @@ worktree。角色工作区必须使用 `--worktree`，详见
 - 禁止提交 `TeamWork/`。
 - 禁止长期让特性分支落后 `sprint-x`。
 - 禁止用统一账号代替真实提交身份。
+- 禁止 Reviewer 未留终态结论，或由未授权角色直接合并集成分支。

@@ -6,6 +6,26 @@
 
 ## [Unreleased]
 
+## [1.1.0-rc.5] - 2026-07-14
+
+### Added
+
+- **代码开工预检**：新增 `tools/code-preflight.mjs`，按 memberId 校验代码仓、
+  feature 分支、Sprint 基线祖先关系以及 worktree Git 姓名/邮箱，减少直推集成分支和统一账号代提。
+- **Sprint 例外与裁决区**：任务表内置一张仅异常时填写的例外表；正常事实仍只写任务行、
+  PR/MR、CI 或 Review，不新增日报和事实流水账。
+
+### Changed
+
+- **启动责任显式化**：任务表新增 Sprint 启动门禁，明确 PO 锁 Goal、SM 组织播报、
+  TL/资深拆分与指派 Reviewer、FS 建仓/分支/worktree，避免 SM 代替专业角色决策。
+- **代码评审证据平台无关**：PR/MR 仍为首选；平台暂不可用时，要求 reviewer、commit range、
+  测试结果、verdict、merge actor 五项等价证据。
+- **关闭检查增强**：`sprint-close.mjs` 检查已完成任务证据、未裁决例外和无有效去向的
+  carry-over；归档改为链接运行目录，不再复制第二套 Sprint 正文。
+- **轻量治理取舍**：只在启动、首次开工、合并、关闭四个门禁快速确认；正常通过不留痕，
+  避免“点检表 + 事实表 + 偏离表”三套并行维护。
+
 ## [1.1.0-rc.4] - 2026-07-13
 
 ### Changed
