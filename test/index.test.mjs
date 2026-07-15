@@ -60,6 +60,15 @@ function runCli(args, opts = {}) {
   });
 }
 
+function removeSandbox(sandbox) {
+  fs.rmSync(sandbox, {
+    recursive: true,
+    force: true,
+    maxRetries: 5,
+    retryDelay: 100,
+  });
+}
+
 test("creates isolated coding-role worktrees and identities", () => {
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "scrum-workspace-test-"));
   const target = path.join(sandbox, "project");
@@ -127,7 +136,7 @@ test("creates isolated coding-role worktrees and identities", () => {
       "Bridge",
     );
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -148,7 +157,7 @@ test("--dry-run does not write files or initialize git", () => {
     assert.ok(output.includes("dry-app"), "should mention substituted repo name in preview");
     assert.equal(fs.existsSync(target), false, "no target dir should be created");
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -181,7 +190,7 @@ test("--no-worktrees skips role worktree creation but keeps repo init", () => {
     );
     assert.equal(config.setupWorktrees, false);
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -251,7 +260,7 @@ test("product reuse records the existing repo without creating a code copy", () 
     assert.ok(monitor.includes("接入现有代码仓并验证角色工作区"));
     assert.ok(monitor.includes("不默认新建 CI、部署环境或发布流水线"));
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -300,7 +309,7 @@ test("rewrite keeps the source repo visible and defers the candidate target repo
     assert.equal(config.repoStrategy, "rewrite");
     assert.equal(config.sprintNumber, 4);
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -350,7 +359,7 @@ test("--remote + --push pushes all branches to a local bare remote", () => {
     const originUrl = git(repo, ["remote", "get-url", "origin"]);
     assert.equal(originUrl, remoteUrl);
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -377,7 +386,7 @@ test("--push refuses placeholder Gmail '+' and @example.com emails", () => {
     }
     assert.ok(threw, "CLI should exit non-zero when pushing with placeholder emails");
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -401,7 +410,7 @@ test("generates operations guidance using the repository inventory", () => {
       "no raw placeholders should remain",
     );
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -562,7 +571,7 @@ test("generates one Sprint task table with owner memberId + responsibleHat and d
     assert.ok(knowledgeCatalog.includes("### 可预见与不可预见"));
     assert.ok(knowledgeCatalog.includes("数量和内容不可预见"));
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -660,7 +669,7 @@ test("keeps advanced document controls available but optional", () => {
       "home page should link to ledger index",
     );
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -713,7 +722,7 @@ test("v0.5.0 generates lightweight Sprint closure guidance", () => {
       "lightweight template should not generate a mandatory verifier",
     );
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -791,7 +800,7 @@ governance: managed
     assert.ok(audit.includes("应签范围：**PO、SM、TL、Mid.BE/QA、Sr.FE/UX、Mid.FE/QA、FS/DevOps**"));
     assert.ok(audit.includes("待签：CHG-100"));
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -898,7 +907,7 @@ test("v0.9.2 generates actionable closure and review integrity guidance", () => 
       (error) => error.status === 2,
     );
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -957,7 +966,7 @@ test("v0.9.3 keeps signoff orchestration with SM and normalizes role scope", () 
     assert.match(audit, /\| Mid\.BE\/QA \| .*○ 当前无受影响变更/);
     assert.ok(audit.includes("不得把汇总、通知或验收转交给被签核成员"));
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -1008,7 +1017,7 @@ test("v0.9.4 preserves Sprint lessons across knowledge, operations, and source t
     assert.ok(backflow.includes("只完成 L1 项目修复"));
     assert.ok(backflow.includes("项目闭环"));
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -1099,7 +1108,7 @@ test("v0.9.5 traces catch-up coverage and keeps rebaseline history honest", () =
     assert.match(audit, /\| PO \| .*⚠️ 待签：CHG-150/);
     assert.ok(audit.includes("恢复当前有效性但保留旧历史缺口"));
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -1226,7 +1235,7 @@ ${danglingRow}`,
     assert.match(fsStateLine(audit), /✅ 当前有效/);
     assert.doesNotMatch(fsStateLine(audit), /待重签/);
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -1286,7 +1295,7 @@ test("initial signoff auto-publishes only from a traceable workspace fact source
     assert.match(guide, /node tools\/signoff\.mjs bootstrap --actor=sm --due=\+72h/);
     assert.equal(fs.existsSync(path.join(guideTarget, ".team")), false);
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -1551,7 +1560,7 @@ test("v0.10.4 publishes immutable notices before signoff", () => {
     );
     runSignoff(["close", `--campaign=${autoCampaignId}`, "--actor=sm"]);
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -1620,7 +1629,7 @@ test("v0.10.5 advisory late signing, hard-mode enforcement, and audit-input drif
       (error) => error.status === 2,
     );
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -1665,7 +1674,7 @@ test("RC3 default create initializes doc-git only and defers the code repo", () 
       (error) => error.status === 2,
     );
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -1701,7 +1710,7 @@ test("RC3 core team stage bootstraps only the active core roles", () => {
     assert.equal(statusOf("srfe"), "optional");
     assert.equal(statusOf("fs"), "planned");
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -1816,7 +1825,7 @@ test("R4.2b member-based signing records memberId + snapshot responsibilities", 
       /Fowler <tl@example\.test>/,
     );
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -1835,7 +1844,7 @@ test("R4.3 team.mjs list and validate render the member-hat view", () => {
     const validated = execFileSync(process.execPath, [tool, "validate"], { cwd: target, encoding: "utf8" });
     assert.match(validated, /Validate: OK/);
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -1902,7 +1911,7 @@ test("R4.3b signoff resolves SM from v2 scrum.scrumMaster (not hardcoded sm)", (
       },
     );
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -1957,7 +1966,7 @@ test("R4.3b team.mjs add/assign migrates to v2 and enforces validate-before-writ
       (error) => error.status === 2,
     );
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -2000,7 +2009,7 @@ test("R4.3b generate_doc_index.py works with v2 member-hat config", () => {
     );
     assert.equal(typeof audit.pendingAssignments, "object");
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -2059,7 +2068,7 @@ test("RC6 team mutations create auditable changes and v2 teams can approve a cod
       "true",
     );
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -2088,7 +2097,7 @@ test("RC6 setup-code-repo rejects every non-empty create target", () => {
     );
     assert.equal(fs.readFileSync(path.join(codeDir, "existing-secret.txt"), "utf8"), "do not absorb\n");
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -2145,7 +2154,7 @@ test("RC6 historical Campaign and Closure survive later member identity changes"
     ));
     assert.equal(audit.pendingCount, 0);
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -2176,7 +2185,7 @@ test("v1.1.0 full-7 default generates v2 roles.config.json with backward-compati
     // teamStage 兼容
     assert.equal(cfg.teamStage, "full-7");
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -2205,7 +2214,7 @@ test("v1.1.0 core + discovery-first produces 3 active members and 0 worktrees", 
     // discovery-first 模式不创建 worktree
     assert.equal(cfg.setupWorktrees, false);
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -2249,7 +2258,7 @@ test("v1.1.0 core + delivery-ready produces 3 active and 1 worktree (TL)", () =>
       /10_代码仓库\/core-dr-app\//,
     );
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -2278,7 +2287,7 @@ test("v1.1.0 balanced-5 profile has 5 members with correct worktree count", () =
       ["beqa", "fefs", "tl"],
     );
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -2308,7 +2317,7 @@ test("v1.1.0 lean-3 profile has 3 members with 2 worktrees", () => {
       ["delivery-builder", "tech-builder"],
     );
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -2337,7 +2346,7 @@ test("v1.1.0 lean-2 profile has 2 members with 2 worktrees", () => {
       ["lead-a", "lead-b"],
     );
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -2364,7 +2373,7 @@ test("v1.1.0 --team-stage and --preset backward compatibility", () => {
     const active = cfg.roleDetails.filter((r) => r.status === "active");
     assert.equal(active.length, 3);
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -2392,7 +2401,7 @@ test("v1.1.0 lean-3 email format uses memberId with hyphens converted to undersc
     assert.ok(builder, "tech-builder member should exist");
     assert.match(builder.email, /tech_builder@/);
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -2427,7 +2436,7 @@ test("v1.1.0 delivery-ready dual-repo: doc repo and code repo have independent G
     );
     assert.ok(wtDirs.length >= 1, "at least one worktree directory should exist");
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -2455,7 +2464,7 @@ test("v1.1.0 delivery-ready initial signoff runs in the doc repo", () => {
       "code repo should not have signoff data",
     );
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -2498,7 +2507,7 @@ test("v1.1.0 lean-2 + delivery-ready + auto signoff end-to-end", () => {
     const worktreeDirs = fs.readdirSync(teamworkDir).filter((d) => !d.startsWith("."));
     assert.equal(worktreeDirs.length, 2, `lean-2 should have 2 worktrees, got ${worktreeDirs.length}`);
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -2535,7 +2544,7 @@ test("code preflight accepts the assigned feature worktree and rejects identity 
     assert.equal(integrationBranch.status, 2);
     assert.match(integrationBranch.stderr, /集成\/稳定分支|不符合 feature/);
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });
 
@@ -2587,6 +2596,6 @@ test("sprint close blocks missing evidence and open exceptions", () => {
     assert.match(ready.stdout, /待处理: 1 项 \(T02\)/);
     assert.match(ready.stdout, /例外: 1，未裁决: 0/);
   } finally {
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 });

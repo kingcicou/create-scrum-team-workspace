@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+## [1.1.0-rc.6] - 2026-07-15
+
+### Fixed
+
+- Hardened test sandbox cleanup with retry-aware `fs.rmSync` options. This fixes an intermittent GitHub Actions/macOS failure where the `RC6 setup-code-repo rejects every non-empty create target` test passed its assertions but failed while removing a temporary Git workspace with `ENOTEMPTY`.
+
 ## [1.1.0-rc.5] - 2026-07-14
 
 ### Added
