@@ -144,6 +144,7 @@ node index.mjs <project-name> \
 | 1.0.0-rc.2 | 启动通知与首签 Notice 分离 | RC1 把“项目创建后第一条群消息”误解成签核通知，成员仍不知道谁先做什么 | A. 扩写首签；B. 新增独立文档；C. 首页生成启动通知、签核维持独立 | 选C；不增加事实源，SM 可原样发群 |
 | 1.0.0-rc.2 | 创建者不默认等于 FS | 模板初始化、仓库接入、CI、集成、发布被叠加到 FS，形成职责过载 | A. FS 全包；B. 改由 SM；C. 创建者单列，FS 只守代码协同，CI 变化触发 | 选C；一次性初始化不污染长期角色职责 |
 | 1.0.0-rc.2 | 任务行加入动作契约 | “技术全景”“工作区基线”等名词只有标题和证据，执行人无法判断何时开始、做到哪里 | A. 另写任务说明；B. 扩充同一任务行；C. 培训解释 | 选B；每行固定 start/actions/DoD/excludes，仍保持一张任务表 |
+| 1.1.0-rc.7 | Multi-reviewer documents use independent review input files | Sprint 5 showed append anchors still allow duplicate headings, nested anchors, and accidental edits to others' text | A. Keep anchor appends; B. require PR platform; C. one Owner for body + per-reviewer input files | Choose C; applies to ADR/API/Runbook/Review/Retro, keeps platform independence and removes shared-body contention |
 | 1.1.0-rc.6 | Test sandbox cleanup uses retry-aware removal | GitHub Actions macOS passed the target assertion but failed while deleting a temporary Git workspace with ENOTEMPTY | A. Ignore CI flake; B. Patch only one test; C. centralize sandbox cleanup helper | Choose C; no runtime behavior change, all sandbox tests share the same resilient cleanup path |
 | 1.0.0-rc.1 | 首签成为创建阶段的一次性 bootstrap | 首次团队签核语义固定，却仍要求 SM 手工 prepare、publish 和重写通知，容易遗漏或漂移 | A. 继续人工；B. 固定静态通知；C. 工具从审计生成 Campaign+不可变 Notice | 选C；创建者/FS 准备，工具生成，SM 跟踪关闭，成员本人执行 |
 | 1.0.0-rc.1 | 自动首签仅用于 workspace Git | 默认独立代码仓不包含角色手册等规范事实源，自动提交会制造不可复现的“已发起” | A. 所有模式强行自动；B. 完全不自动；C. workspace 自动、其余 guide | 选C；宁可明确待办，不伪造治理工件 |

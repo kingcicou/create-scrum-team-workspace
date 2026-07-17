@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+## [1.1.0-rc.7] - 2026-07-17
+
+### Changed
+
+- Generalized review collaboration from Review/Retro-only append anchors to independent review input files for any multi-reviewer document. New guidance uses `_review-inputs/<target>/<member-id>.md`, keeps the target document under a single Owner, and treats anchor-based appends as historical/low-contention compatibility only.
+
 ## [1.1.0-rc.6] - 2026-07-15
 
 ### Fixed
