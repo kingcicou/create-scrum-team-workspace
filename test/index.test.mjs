@@ -830,7 +830,7 @@ test("v0.9.2 generates actionable closure and review integrity guidance", () => 
     );
 
     assert.ok(smGuide.includes("先查什么、选哪个模板"));
-    assert.ok(smGuide.includes("Review/Retro 评审完整性检查"));
+    assert.ok(smGuide.includes("多人评审完整性检查"));
     assert.ok(roleManual.includes("稳定流水线只做触发验证"));
     assert.ok(roleManual.includes("Sprint 关闭事实同步"));
     assert.ok(closure.includes("工作完成"));

@@ -14,6 +14,11 @@ TeamWork/
 SprintWork/
 DevWorktrees/
 
+# Local review drafts are personal scratch space. Formal review evidence
+# under _review-inputs/ is intentionally tracked by Git.
+**/_review-drafts/
+Temp/review-drafts/
+
 # Local env
 .env
 .env.*

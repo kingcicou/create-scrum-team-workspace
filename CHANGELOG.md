@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+## [1.1.0-rc.8] - 2026-07-17
+
+### Changed
+
+- Clarified the storage boundary for independent review input: `_review-inputs/` is formal review evidence and remains tracked by Git, while `_review-drafts/` and `Temp/review-drafts/` are ignored personal scratch space.
+
 ## [1.1.0-rc.7] - 2026-07-17
 
 ### Changed

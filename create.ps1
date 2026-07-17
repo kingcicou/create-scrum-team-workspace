@@ -5,10 +5,10 @@
 # 模板逻辑唯一定义在 index.mjs，不在本脚本里重复实现。
 #
 # Usage (remote, 推荐):
-#   irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.1.0-rc.7/create.ps1 | iex
+#   irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.1.0-rc.8/create.ps1 | iex
 #
 # Usage (remote + 项目名):
-#   $env:PROJECT_NAME="my-project"; irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.1.0-rc.7/create.ps1 | iex
+#   $env:PROJECT_NAME="my-project"; irm https://raw.githubusercontent.com/kingcicou/create-scrum-team-workspace/v1.1.0-rc.8/create.ps1 | iex
 #
 # Usage (local clone):
 #   .\create.ps1 my-project --type=new --preset=tech
@@ -20,7 +20,7 @@
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
 $Repo = "kingcicou/create-scrum-team-workspace"
-$Ref  = if ($env:SCRUM_TEMPLATE_REF) { $env:SCRUM_TEMPLATE_REF } else { "v1.1.0-rc.7" }
+$Ref  = if ($env:SCRUM_TEMPLATE_REF) { $env:SCRUM_TEMPLATE_REF } else { "v1.1.0-rc.8" }
 
 Write-Host ""
 Write-Host "==============================================" -ForegroundColor Cyan
